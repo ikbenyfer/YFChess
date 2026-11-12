@@ -11,6 +11,7 @@
 #import "ChessClock.h"
 #import "SettingsViewController.h"
 #import "Online.h"
+#import "Puzzles.h"
 
 @implementation MainMenuViewController {
     PieceView *_logo;
@@ -35,8 +36,8 @@
     [self.view addSubview:_subtitle];
 
     NSArray *titles = @[ @"♚  Spelen tegen bot", @"♛  Custom chess", @"♞  Lokaal 1 tegen 1",
-                         @"🌐  Online spelen (lichess)", @"⏱  Schaakklok", @"⚙  Instellingen" ];
-    SEL actions[6] = { @selector(botTapped), @selector(customTapped), @selector(localTapped), @selector(onlineTapped),
+                         @"🧩  Puzzels", @"🌐  Online spelen (lichess)", @"⏱  Schaakklok", @"⚙  Instellingen" ];
+    SEL actions[7] = { @selector(botTapped), @selector(customTapped), @selector(localTapped), @selector(puzzlesTapped), @selector(onlineTapped),
                        @selector(clockTapped), @selector(settingsTapped) };
     NSMutableArray *bs = [NSMutableArray array];
     for (NSUInteger i = 0; i < titles.count; i++) {
@@ -97,11 +98,22 @@
     [super viewDidLayoutSubviews];
     CGFloat W = self.view.bounds.size.width, H = self.view.bounds.size.height;
     BOOL pad = [YFUI isPad];
-    CGFloat bh = pad ? 62 : 50;
-    CGFloat sp = pad ? 16 : 10;
-    CGFloat logo = pad ? 130 : (H < 500 ? 60 : 90);
-    CGFloat titleH = pad ? 56 : 40, subH = pad ? 26 : 20;
-    CGFloat contentH = logo + titleH + subH + 24 + _buttons.count * bh + (_buttons.count - 1) * sp;
+    CGFloat bh = pad ? 60 : 50;
+    CGFloat sp = pad ? 14 : 9;
+    CGFloat logo = pad ? 120 : (H < 600 ? 56 : 84);
+    CGFloat titleH = pad ? 52 : 40, subH = pad ? 26 : 20;
+    CGFloat n = (CGFloat)_buttons.count;
+    CGFloat contentH = logo + titleH + subH + 20 + n * bh + (n - 1) * sp;
+    if (contentH > H - 30) {
+        // Te weinig ruimte (bijv. liggend): kleiner logo en lagere knoppen.
+        logo = pad ? 70 : 44;
+        titleH = pad ? 44 : 34;
+        contentH = logo + titleH + subH + 20 + n * bh + (n - 1) * sp;
+        if (contentH > H - 30) {
+            bh = MAX(40, (H - 30 - logo - titleH - subH - 20 - (n - 1) * sp) / n);
+            contentH = logo + titleH + subH + 20 + n * bh + (n - 1) * sp;
+        }
+    }
     CGFloat y = MAX(24, (H - contentH) / 2.0);
     CGFloat colW = MIN(W - 40, pad ? 460 : 380);
     CGFloat x = (W - colW) / 2.0;
@@ -111,7 +123,7 @@
     _titleLabel.frame = CGRectMake(x, y, colW, titleH);
     y += titleH;
     _subtitle.frame = CGRectMake(x, y, colW, subH);
-    y += subH + 24;
+    y += subH + 20;
     for (UIView *v in _buttons) {
         CGAffineTransform t = v.transform;
         v.transform = CGAffineTransformIdentity;
@@ -137,6 +149,11 @@
     [self.navigationController pushViewController:[[ChessClockViewController alloc] init] animated:YES];
 }
 
+- (void)puzzlesTapped {
+    [self.navigationController pushViewController:[[PuzzleListViewController alloc] initWithStyle:UITableViewStyleGrouped]
+                                         animated:YES];
+}
+
 - (void)onlineTapped {
     [self.navigationController pushViewController:[[OnlineViewController alloc] init] animated:YES];
 }
@@ -151,6 +168,11 @@
 #pragma mark - Tegen de bot: keuzes
 
 @implementation BotSetupViewController {
+    UIScrollView *_scroll;
+    UILabel *_adaptiveTitle;
+    UILabel *_adaptiveInfo;
+    YFButton *_adaptiveButton;
+    YFButton *_adaptiveReset;
     UILabel *_colorLabel;
     UISegmentedControl *_colorControl;
     UILabel *_levelLabel;
@@ -168,38 +190,51 @@
     self.title = @"Spelen tegen bot";
     SettingsManager *s = [SettingsManager shared];
     CGFloat fs = [YFUI isPad] ? 20 : 16;
+    _scroll = [[UIScrollView alloc] init];
+    _scroll.alwaysBounceVertical = YES;
+    [self.view addSubview:_scroll];
+    _adaptiveTitle = [YFUI labelWithSize:fs bold:YES];
+    _adaptiveTitle.text = @"Meegroeiende bot";
+    [_scroll addSubview:_adaptiveTitle];
+    _adaptiveInfo = [YFUI labelWithSize:fs - 3 bold:NO];
+    [_scroll addSubview:_adaptiveInfo];
+    _adaptiveButton = [YFUI buttonWithTitle:@"" target:self action:@selector(adaptiveTapped)];
+    _adaptiveButton.primary = YES;
+    [_scroll addSubview:_adaptiveButton];
+    _adaptiveReset = [YFUI buttonWithTitle:@"Terugzetten naar ultra slecht" target:self action:@selector(adaptiveResetTapped)];
+    _adaptiveReset.titleLabel.font = [UIFont systemFontOfSize:fs - 3];
+    [_scroll addSubview:_adaptiveReset];
     _colorLabel = [YFUI labelWithSize:fs bold:YES];
     _colorLabel.text = @"Met welke kleur speel jij?";
-    [self.view addSubview:_colorLabel];
+    [_scroll addSubview:_colorLabel];
     _colorControl = [[UISegmentedControl alloc] initWithItems:@[@"Wit", @"Zwart", @"Willekeurig"]];
     _colorControl.selectedSegmentIndex = s.botColor;
     [_colorControl addTarget:self action:@selector(changed) forControlEvents:UIControlEventValueChanged];
-    [self.view addSubview:_colorControl];
+    [_scroll addSubview:_colorControl];
     _levelLabel = [YFUI labelWithSize:fs bold:YES];
-    _levelLabel.text = @"Hoe sterk is de bot?";
-    [self.view addSubview:_levelLabel];
+    _levelLabel.text = @"Of kies zelf een vast niveau:";
+    [_scroll addSubview:_levelLabel];
     _levelControl = [[UISegmentedControl alloc] initWithItems:@[@"1", @"2", @"3", @"4", @"5"]];
     _levelControl.selectedSegmentIndex = s.botLevel - 1;
     [_levelControl addTarget:self action:@selector(changed) forControlEvents:UIControlEventValueChanged];
-    [self.view addSubview:_levelControl];
+    [_scroll addSubview:_levelControl];
     _levelInfo = [YFUI labelWithSize:fs - 2 bold:NO];
-    [self.view addSubview:_levelInfo];
+    [_scroll addSubview:_levelInfo];
     _ratingLabel = [YFUI labelWithSize:fs bold:YES];
     _ratingLabel.text = @"Zetbeoordeling (beste zet … blunder)";
     _ratingLabel.adjustsFontSizeToFitWidth = YES;
     _ratingLabel.minimumScaleFactor = 0.6;
     _ratingLabel.numberOfLines = 1;
-    [self.view addSubview:_ratingLabel];
+    [_scroll addSubview:_ratingLabel];
     _ratingSwitch = [YFUI themedSwitch];
     [_ratingSwitch addTarget:self action:@selector(ratingChanged) forControlEvents:UIControlEventValueChanged];
-    [self.view addSubview:_ratingSwitch];
-    _startButton = [YFUI buttonWithTitle:@"▶ Start (normale opstelling)" target:self action:@selector(startTapped)];
-    _startButton.primary = YES;
+    [_scroll addSubview:_ratingSwitch];
+    _startButton = [YFUI buttonWithTitle:@"▶ Start op dit niveau" target:self action:@selector(startTapped)];
     _savedButton = [YFUI buttonWithTitle:@"Start vanaf opgeslagen positie" target:self action:@selector(savedTapped)];
     _customButton = [YFUI buttonWithTitle:@"Eigen stelling maken (Custom)" target:self action:@selector(customTapped)];
-    [self.view addSubview:_startButton];
-    [self.view addSubview:_savedButton];
-    [self.view addSubview:_customButton];
+    [_scroll addSubview:_startButton];
+    [_scroll addSubview:_savedButton];
+    [_scroll addSubview:_customButton];
     [self changed];
 }
 
@@ -208,7 +243,11 @@
     [self.navigationController setNavigationBarHidden:NO animated:animated];
     [YFUI applyThemeToController:self];
     SettingsManager *s = [SettingsManager shared];
-    for (UILabel *l in @[_colorLabel, _levelLabel, _ratingLabel]) l.textColor = s.textColor;
+    for (UILabel *l in @[_colorLabel, _levelLabel, _ratingLabel, _adaptiveTitle]) l.textColor = s.textColor;
+    _adaptiveInfo.textColor = s.secondaryTextColor;
+    [_adaptiveButton applyTheme];
+    [_adaptiveReset applyTheme];
+    [self updateAdaptive];
     _ratingSwitch.onTintColor = s.accentColor;
     _ratingSwitch.on = s.moveRating;
     _levelInfo.textColor = s.secondaryTextColor;
@@ -222,12 +261,18 @@
 - (void)viewDidLayoutSubviews {
     [super viewDidLayoutSubviews];
     CGFloat W = self.view.bounds.size.width;
+    _scroll.frame = self.view.bounds;
     CGFloat colW = MIN(W - 40, 520);
     CGFloat x = (W - colW) / 2.0;
-    CGFloat y = self.topLayoutGuide.length + 24;
-    CGFloat bh = [YFUI isPad] ? 64 : 52;
+    CGFloat y = self.topLayoutGuide.length + 20;
+    CGFloat bh = [YFUI isPad] ? 60 : 50;
     _colorLabel.frame = CGRectMake(x, y, colW, 28); y += 34;
-    _colorControl.frame = CGRectMake(x, y, colW, 40); y += 58;
+    _colorControl.frame = CGRectMake(x, y, colW, 40); y += 56;
+    _adaptiveTitle.frame = CGRectMake(x, y, colW, 28); y += 30;
+    CGSize ai = [_adaptiveInfo sizeThatFits:CGSizeMake(colW, 400)];
+    _adaptiveInfo.frame = CGRectMake(x, y, colW, ceil(ai.height)); y += ceil(ai.height) + 8;
+    _adaptiveButton.frame = CGRectMake(x, y, colW, bh); y += bh + 8;
+    _adaptiveReset.frame = CGRectMake(x + colW * 0.25, y, colW * 0.5, 36); y += 36 + 26;
     _levelLabel.frame = CGRectMake(x, y, colW, 28); y += 34;
     _levelControl.frame = CGRectMake(x, y, colW, 40); y += 48;
     _levelInfo.frame = CGRectMake(x, y, colW, 48); y += 56;
@@ -236,6 +281,45 @@
     _startButton.frame = CGRectMake(x, y, colW, bh); y += bh + 12;
     _savedButton.frame = CGRectMake(x, y, colW, bh); y += bh + 12;
     _customButton.frame = CGRectMake(x, y, colW, bh);
+    _scroll.contentSize = CGSizeMake(W, y + bh + 24);
+}
+
+- (void)updateAdaptive {
+    SettingsManager *s = [SettingsManager shared];
+    NSInteger st = s.adaptiveStrength;
+    [_adaptiveButton setTitle:[NSString stringWithFormat:@"▶ Meegroeiende bot (sterkte %ld · %@)", (long)st,
+                               [SettingsManager strengthName:st]] forState:UIControlStateNormal];
+    _adaptiveInfo.text = [NSString stringWithFormat:
+        @"Begint ultra slecht. Win je, dan wordt hij sterker. Wint hij, dan wordt hij weer makkelijker. "
+        @"Tot nu toe: %ld gewonnen, %ld verloren, %ld remise.",
+        (long)s.adaptiveWins, (long)s.adaptiveLosses, (long)s.adaptiveDraws];
+    _adaptiveReset.hidden = st == 0 && s.adaptiveWins + s.adaptiveLosses + s.adaptiveDraws == 0;
+    [self.view setNeedsLayout];
+}
+
+- (void)adaptiveTapped {
+    SettingsManager *s = [SettingsManager shared];
+    GameManager *g = [[GameManager alloc] initWithFEN:nil mode:GameModeBot humanColor:[self chosenColor] botLevel:1];
+    g.adaptive = YES;
+    g.adaptiveStrength = s.adaptiveStrength;
+    [self.navigationController pushViewController:[[GameViewController alloc] initWithGame:g] animated:YES];
+}
+
+- (void)adaptiveResetTapped {
+    UIAlertController *a = [UIAlertController alertControllerWithTitle:@"Terugzetten?"
+                                                               message:@"De meegroeiende bot begint weer ultra slecht en de telling gaat naar 0."
+                                                        preferredStyle:UIAlertControllerStyleAlert];
+    [a addAction:[UIAlertAction actionWithTitle:@"Annuleren" style:UIAlertActionStyleCancel handler:nil]];
+    [a addAction:[UIAlertAction actionWithTitle:@"Terugzetten" style:UIAlertActionStyleDestructive handler:^(UIAlertAction *act) {
+        SettingsManager *s = [SettingsManager shared];
+        s.adaptiveStrength = 0;
+        s.adaptiveWins = 0;
+        s.adaptiveLosses = 0;
+        s.adaptiveDraws = 0;
+        [s save];
+        [self updateAdaptive];
+    }]];
+    [self presentViewController:a animated:YES completion:nil];
 }
 
 - (void)changed {

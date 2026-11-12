@@ -5,3 +5,8 @@
 
 @interface LocalMultiplayerViewController : UIViewController
 @end
+
+// Lijst met opgeslagen 1-tegen-1-partijen. Vegen naar links = verwijderen.
+@interface SavedGamesViewController : UITableViewController
+@property (nonatomic, copy) void (^onPick)(NSDictionary *game);
+@end

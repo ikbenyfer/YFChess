@@ -22,6 +22,7 @@
     YFButton *_undoButton;
     YFButton *_restartButton;
     YFButton *_flipButton;
+    YFButton *_saveButton;
     UIActivityIndicatorView *_spinner;
     int _selected;
     NSUInteger _announcedPly;
@@ -42,7 +43,10 @@
     [super viewDidLoad];
     SettingsManager *s = [SettingsManager shared];
     if (_game.mode == GameModeBot) {
-        self.title = [NSString stringWithFormat:@"Tegen de bot (niveau %ld)", (long)_game.botLevel];
+        if (_game.adaptive)
+            self.title = [NSString stringWithFormat:@"Meegroeiende bot (sterkte %ld)", (long)_game.adaptiveStrength];
+        else
+            self.title = [NSString stringWithFormat:@"Tegen de bot (niveau %ld)", (long)_game.botLevel];
     } else {
         self.title = @"1 tegen 1";
     }
@@ -99,6 +103,10 @@
     [_panel addSubview:_undoButton];
     [_panel addSubview:_restartButton];
     [_panel addSubview:_flipButton];
+    if (_game.mode == GameModeLocal) {
+        _saveButton = [YFUI buttonWithTitle:@"⬇ Opslaan" target:self action:@selector(saveTapped)];
+        [_panel addSubview:_saveButton];
+    }
 
     _spinner = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleGray];
     _spinner.hidesWhenStopped = YES;
@@ -146,7 +154,7 @@
     _movesView.backgroundColor = s.backgroundColor;
     _movesView.textColor = s.textColor;
     _spinner.color = s.accentColor;
-    for (YFButton *b in @[_undoButton, _restartButton, _flipButton]) [b applyTheme];
+    for (YFButton *b in [self panelButtons]) [b applyTheme];
     _board.showCoordinates = s.showCoordinates;
     [_board refreshTheme];
 }
@@ -187,8 +195,9 @@
     _capturedBlack.frame = CGRectMake(pad, y, pw - 2 * pad, lineH);
     y += lineH + 8;
     CGFloat bh = [YFUI isPad] ? 56 : 46;
-    NSInteger cols = pw > 330 ? 3 : 3;
-    y = [YFUI layoutViews:@[_undoButton, _restartButton, _flipButton] x:pad y:y width:pw - 2 * pad
+    NSArray *buttons = [self panelButtons];
+    NSInteger cols = buttons.count == 4 ? 2 : 3;
+    y = [YFUI layoutViews:buttons x:pad y:y width:pw - 2 * pad
                itemHeight:bh columns:cols spacing:8] + 10;
     CGFloat mh = ph - y - pad;
     _movesView.hidden = mh < 30;
@@ -210,7 +219,95 @@
             });
         }
     }
+    if (_game.saveId) [self storeGameQuietly];
     [self announceIfOver];
+}
+
+- (NSArray *)panelButtons {
+    if (_saveButton) return @[_undoButton, _restartButton, _flipButton, _saveButton];
+    return @[_undoButton, _restartButton, _flipButton];
+}
+
+#pragma mark - Opslaan (1 tegen 1)
+
+- (void)storeGameQuietly {
+    if (!_game.saveId) return;
+    NSDictionary *g = @{ @"id": _game.saveId,
+                         @"name": _game.saveName ?: @"Partij",
+                         @"date": [NSDate date],
+                         @"fen": [_game initialFEN],
+                         @"moves": [_game uciMoves] };
+    [[SettingsManager shared] storeGame:g];
+}
+
+- (void)saveTapped {
+    if (_game.saveId) {
+        [self storeGameQuietly];
+        [YFUI showMessage:[NSString stringWithFormat:@"“%@” is bijgewerkt. Vanaf nu wordt deze partij na elke zet vanzelf bewaard.", _game.saveName]
+                    title:@"Opgeslagen" from:self];
+        return;
+    }
+    NSDateFormatter *df = [[NSDateFormatter alloc] init];
+    df.dateFormat = @"d-M HH:mm";
+    NSString *suggestion = [NSString stringWithFormat:@"Partij %@", [df stringFromDate:[NSDate date]]];
+    UIAlertController *a = [UIAlertController alertControllerWithTitle:@"Partij opslaan"
+                                                               message:@"Geef de partij een naam. Later ga je verder via Lokaal 1 tegen 1 → Opgeslagen partij."
+                                                        preferredStyle:UIAlertControllerStyleAlert];
+    [a addTextFieldWithConfigurationHandler:^(UITextField *tf) {
+        tf.text = suggestion;
+        tf.clearButtonMode = UITextFieldViewModeWhileEditing;
+    }];
+    __weak UIAlertController *weakAlert = a;
+    [a addAction:[UIAlertAction actionWithTitle:@"Annuleren" style:UIAlertActionStyleCancel handler:nil]];
+    [a addAction:[UIAlertAction actionWithTitle:@"Opslaan" style:UIAlertActionStyleDefault handler:^(UIAlertAction *act) {
+        NSString *name = [weakAlert.textFields.firstObject.text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
+        self->_game.saveName = name.length ? name : suggestion;
+        self->_game.saveId = [[NSUUID UUID] UUIDString];
+        [self storeGameQuietly];
+        [YFUI showMessage:@"Opgeslagen. Vanaf nu wordt deze partij na elke zet vanzelf bewaard." title:@"Opgeslagen" from:self];
+    }]];
+    [self presentViewController:a animated:YES completion:nil];
+}
+
+#pragma mark - Meegroeiende bot
+
+// Verwerkt de uitslag: jij wint = bot sterker, bot wint = bot zwakker. Geeft uitleg terug.
+- (NSString *)countAdaptiveResult {
+    if (!_game.adaptive || _game.resultCounted) return nil;
+    _game.resultCounted = YES;
+    SettingsManager *s = [SettingsManager shared];
+    NSInteger before = s.adaptiveStrength, after = before;
+    CEPosition p = _game.position;
+    NSString *text;
+    if (_game.status == CE_CHECKMATE) {
+        int winner = p.side ^ 1;
+        if (winner == _game.humanColor) {
+            after = MIN(100, before + (before < 30 ? 12 : 8));
+            s.adaptiveWins++;
+            text = @"Jij wint, dus de bot wordt sterker.";
+        } else {
+            after = MAX(0, before - (before < 30 ? 8 : 10));
+            s.adaptiveLosses++;
+            text = @"De bot wint, dus hij wordt wat makkelijker.";
+        }
+    } else {
+        after = MIN(100, before + 3);
+        s.adaptiveDraws++;
+        text = @"Remise: de bot wordt een klein beetje sterker.";
+    }
+    s.adaptiveStrength = after;
+    [s save];
+    return [NSString stringWithFormat:@"%@\nSterkte: %ld → %ld (%@).", text, (long)before, (long)after,
+            [SettingsManager strengthName:after]];
+}
+
+- (void)startNewGame {
+    _selected = -1;
+    if (_game.adaptive) {
+        _game.adaptiveStrength = [SettingsManager shared].adaptiveStrength;
+        self.title = [NSString stringWithFormat:@"Meegroeiende bot (sterkte %ld)", (long)_game.adaptiveStrength];
+    }
+    [_game restart];
 }
 
 - (void)refreshAnimatedFrom:(int)from to:(int)to {
@@ -374,12 +471,15 @@
     if (!self.view.window) return;
     _announced = YES;
     _announcedPly = _game.plyCount;
+    NSString *msg = [_game resultTitle];
+    NSString *adaptiveText = [self countAdaptiveResult];
+    if (adaptiveText) msg = [NSString stringWithFormat:@"%@\n\n%@", msg, adaptiveText];
     UIAlertController *a = [UIAlertController alertControllerWithTitle:@"Partij afgelopen"
-                                                               message:[_game resultTitle]
+                                                               message:msg
                                                         preferredStyle:UIAlertControllerStyleAlert];
     [a addAction:[UIAlertAction actionWithTitle:@"Bekijk bord" style:UIAlertActionStyleCancel handler:nil]];
     [a addAction:[UIAlertAction actionWithTitle:@"Nieuwe partij" style:UIAlertActionStyleDefault handler:^(UIAlertAction *act) {
-        [self->_game restart];
+        [self startNewGame];
     }]];
     [self presentViewController:a animated:YES completion:nil];
 }
@@ -445,8 +545,7 @@
                                                         preferredStyle:UIAlertControllerStyleAlert];
     [a addAction:[UIAlertAction actionWithTitle:@"Annuleren" style:UIAlertActionStyleCancel handler:nil]];
     [a addAction:[UIAlertAction actionWithTitle:@"Opnieuw" style:UIAlertActionStyleDestructive handler:^(UIAlertAction *act) {
-        self->_selected = -1;
-        [self->_game restart];
+        [self startNewGame];
     }]];
     [self presentViewController:a animated:YES completion:nil];
 }

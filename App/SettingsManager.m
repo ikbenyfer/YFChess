@@ -38,6 +38,7 @@ static UIColor *RGB(unsigned int hex) {
             @"botColor": @0,
             @"clockBase": @300,
             @"clockIncrement": @0,
+            @"adaptiveStrength": @0,
         }];
         _darkTheme = [d boolForKey:@"darkTheme"];
         _pieceSet = [d integerForKey:@"pieceSet"];
@@ -59,6 +60,11 @@ static UIColor *RGB(unsigned int hex) {
         _clockIncrementSeconds = [d integerForKey:@"clockIncrement"];
         if (_clockIncrementSeconds < 0) _clockIncrementSeconds = 0;
         _editorDraftFEN = [d stringForKey:@"editorDraft"];
+        _adaptiveStrength = [d integerForKey:@"adaptiveStrength"];
+        if (_adaptiveStrength < 0 || _adaptiveStrength > 100) _adaptiveStrength = 0;
+        _adaptiveWins = [d integerForKey:@"adaptiveWins"];
+        _adaptiveLosses = [d integerForKey:@"adaptiveLosses"];
+        _adaptiveDraws = [d integerForKey:@"adaptiveDraws"];
     }
     return self;
 }
@@ -78,6 +84,10 @@ static UIColor *RGB(unsigned int hex) {
     [d setInteger:_botColor forKey:@"botColor"];
     [d setInteger:_clockBaseSeconds forKey:@"clockBase"];
     [d setInteger:_clockIncrementSeconds forKey:@"clockIncrement"];
+    [d setInteger:_adaptiveStrength forKey:@"adaptiveStrength"];
+    [d setInteger:_adaptiveWins forKey:@"adaptiveWins"];
+    [d setInteger:_adaptiveLosses forKey:@"adaptiveLosses"];
+    [d setInteger:_adaptiveDraws forKey:@"adaptiveDraws"];
     if (_editorDraftFEN) [d setObject:_editorDraftFEN forKey:@"editorDraft"];
     else [d removeObjectForKey:@"editorDraft"];
     [d synchronize];
@@ -113,6 +123,57 @@ static UIColor *RGB(unsigned int hex) {
 }
 - (UIColor *)errorColor { return _darkTheme ? RGB(0xFF7A6B) : RGB(0xB3261E); }
 - (UIColor *)okColor { return _darkTheme ? RGB(0x8FD18F) : RGB(0x2E7D32); }
+
++ (NSString *)strengthName:(NSInteger)s {
+    if (s < 10) return @"ultra slecht";
+    if (s < 30) return @"beginner";
+    if (s < 50) return @"makkelijk";
+    if (s < 70) return @"gemiddeld";
+    if (s < 85) return @"sterk";
+    return @"heel sterk";
+}
+
+#pragma mark - Partijen
+
+- (NSArray *)savedGames {
+    NSArray *a = [[NSUserDefaults standardUserDefaults] arrayForKey:@"savedGames"];
+    return a ? a : @[];
+}
+
+- (void)storeGame:(NSDictionary *)game {
+    NSMutableArray *a = [[self savedGames] mutableCopy];
+    for (NSUInteger i = 0; i < a.count; i++) {
+        if ([a[i][@"id"] isEqualToString:game[@"id"]]) { [a removeObjectAtIndex:i]; break; }
+    }
+    [a insertObject:game atIndex:0];
+    [[NSUserDefaults standardUserDefaults] setObject:a forKey:@"savedGames"];
+    [[NSUserDefaults standardUserDefaults] synchronize];
+}
+
+- (void)deleteGameWithId:(NSString *)gameId {
+    NSMutableArray *a = [[self savedGames] mutableCopy];
+    for (NSUInteger i = 0; i < a.count; i++) {
+        if ([a[i][@"id"] isEqualToString:gameId]) { [a removeObjectAtIndex:i]; break; }
+    }
+    [[NSUserDefaults standardUserDefaults] setObject:a forKey:@"savedGames"];
+    [[NSUserDefaults standardUserDefaults] synchronize];
+}
+
+#pragma mark - Puzzels
+
+- (BOOL)isPuzzleSolved:(NSString *)fen {
+    NSArray *a = [[NSUserDefaults standardUserDefaults] arrayForKey:@"solvedPuzzles"];
+    return [a containsObject:fen];
+}
+
+- (void)markPuzzleSolved:(NSString *)fen {
+    if (!fen || [self isPuzzleSolved:fen]) return;
+    NSArray *a = [[NSUserDefaults standardUserDefaults] arrayForKey:@"solvedPuzzles"];
+    NSMutableArray *m = a ? [a mutableCopy] : [NSMutableArray array];
+    [m addObject:fen];
+    [[NSUserDefaults standardUserDefaults] setObject:m forKey:@"solvedPuzzles"];
+    [[NSUserDefaults standardUserDefaults] synchronize];
+}
 
 #pragma mark - Posities
 

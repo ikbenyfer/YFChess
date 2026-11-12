@@ -56,6 +56,7 @@
     _lastFrom = -1;
     _lastTo = -1;
     _startFullmove = _initial.fullmove;
+    _resultCounted = NO;
     _startSide = _initial.side;
     [self updateStatus];
 }
@@ -119,7 +120,8 @@
                                    @"cap": @(captured),
                                    @"from": @(m.from),
                                    @"to": @(m.to),
-                                   @"color": @(_pos.side) } mutableCopy];
+                                   @"color": @(_pos.side),
+                                   @"uci": [self uciFor:m] } mutableCopy];
     [_records addObject:rec];
     if (_ratingEnabled && (_mode == GameModeLocal || _pos.side == _humanColor)) {
         [self analyseRecord:rec before:_pos move:m history:[_hashes copy]];
@@ -163,6 +165,39 @@
             if (me.onRatingChange) me.onRatingChange(me);
         });
     });
+}
+
+- (NSString *)uciFor:(CEMove)m {
+    char buf[8];
+    ce_move_to_uci(m, buf, sizeof buf);
+    return [NSString stringWithUTF8String:buf];
+}
+
+- (NSString *)initialFEN {
+    char buf[128];
+    ce_to_fen(&_initial, buf, sizeof buf);
+    return [NSString stringWithUTF8String:buf];
+}
+
+- (NSArray *)uciMoves {
+    NSMutableArray *a = [NSMutableArray arrayWithCapacity:_records.count];
+    for (NSDictionary *r in _records) [a addObject:r[@"uci"]];
+    return a;
+}
+
+- (void)loadMoves:(NSArray *)uciMoves {
+    BOOL rating = _ratingEnabled;
+    _ratingEnabled = NO;
+    void (^change)(GameManager *, int, int) = self.onChange;
+    self.onChange = nil;
+    for (NSString *u in uciMoves) {
+        if (![u isKindOfClass:[NSString class]]) break;
+        CEMove m;
+        if (!ce_parse_uci(&_pos, u.UTF8String, &m)) break;
+        [self applyMove:m];
+    }
+    self.onChange = change;
+    _ratingEnabled = rating;
 }
 
 - (NSDictionary *)recordAtPly:(NSUInteger)ply {
@@ -246,12 +281,17 @@
     CEPosition pos = _pos;
     NSData *hist = [_hashes copy];
     int level = (int)_botLevel;
+    BOOL adaptive = _adaptive;
+    int strength = (int)_adaptiveStrength;
     NSTimeInterval started = [NSDate timeIntervalSinceReferenceDate];
     __weak GameManager *weakSelf = self;
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
         CEMove move;
-        int ok = cb_choose_move(&pos, (const uint64_t *)hist.bytes, (int)(hist.length / sizeof(uint64_t)),
-                                level, &move, &token->flag);
+        int ok = adaptive
+            ? cb_choose_move_strength(&pos, (const uint64_t *)hist.bytes, (int)(hist.length / sizeof(uint64_t)),
+                                      strength, &move, &token->flag)
+            : cb_choose_move(&pos, (const uint64_t *)hist.bytes, (int)(hist.length / sizeof(uint64_t)),
+                             level, &move, &token->flag);
         // Even wachten zodat de bot niet "onmiddellijk" terugslaat.
         NSTimeInterval spent = [NSDate timeIntervalSinceReferenceDate] - started;
         double wait = spent < 0.45 ? 0.45 - spent : 0.0;

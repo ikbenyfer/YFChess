@@ -22,6 +22,12 @@
 @property (nonatomic) NSInteger clockBaseSeconds;
 @property (nonatomic) NSInteger clockIncrementSeconds;
 @property (nonatomic, copy) NSString *editorDraftFEN;
+// Meegroeiende bot
+@property (nonatomic) NSInteger adaptiveStrength;   // 0 t/m 100
+@property (nonatomic) NSInteger adaptiveWins;
+@property (nonatomic) NSInteger adaptiveLosses;
+@property (nonatomic) NSInteger adaptiveDraws;
++ (NSString *)strengthName:(NSInteger)strength;
 
 - (void)save;
 + (NSArray *)pieceSetNames;
@@ -44,5 +50,14 @@
 - (NSArray *)savedPositions;
 - (void)savePositionNamed:(NSString *)name fen:(NSString *)fen;
 - (void)deletePositionAtIndex:(NSUInteger)index;
+
+// Opgeslagen 1-tegen-1-partijen: @{ @"id", @"name", @"date", @"fen", @"moves", @"autoFlip" }
+- (NSArray *)savedGames;
+- (void)storeGame:(NSDictionary *)game;          // zelfde id = bijwerken
+- (void)deleteGameWithId:(NSString *)gameId;
+
+// Opgeloste puzzels (FEN-teksten).
+- (BOOL)isPuzzleSolved:(NSString *)fen;
+- (void)markPuzzleSolved:(NSString *)fen;
 
 @end

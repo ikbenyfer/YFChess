@@ -19,6 +19,24 @@ Gemaakt in Objective-C + UIKit en gebouwd met Theos op GitHub Actions.
 - **Instellingen**: licht/donker thema, animaties, legale zetten tonen, coördinaten,
   botniveau. Alles wordt bewaard in NSUserDefaults.
 
+## Meegroeiende bot
+
+Bij "Spelen tegen bot" staat de meegroeiende bot. Zijn sterkte loopt van 0 (ultra slecht: bijna
+willekeurige zetten, soms zelfs bewust de slechtste) tot 100. Win je, dan gaat hij omhoog (+12 onder
+sterkte 30, daarna +8); wint hij, dan gaat hij omlaag (-8 / -10); remise is +3. De sterkte en de telling
+worden bewaard en kunnen worden teruggezet.
+
+## Puzzels
+
+Mat in 1, mat in 2 en eindspel-oefeningen (zet mat tegen de bot binnen een aantal zetten). Elke puzzel
+wordt in de tests gecontroleerd met een eigen matzoeker. Elke zet die (geforceerd) mat geeft telt als goed,
+niet alleen één vaste oplossing. Bij mat in 2 verdedigt de tegenstander zo lang mogelijk.
+
+## 1 tegen 1 opslaan
+
+Tik tijdens een 1-tegen-1-partij op Opslaan. Daarna wordt de partij na elke zet vanzelf bijgewerkt.
+Verder spelen via Lokaal 1 tegen 1 → Opgeslagen partij verder spelen.
+
 ## Zetbeoordeling
 
 Bij spelen tegen de bot, 1 tegen 1 en Custom kun je vóór het potje de zetbeoordeling aan- of uitzetten

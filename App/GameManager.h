@@ -29,6 +29,16 @@ typedef NS_ENUM(NSInteger, GameMode) {
 
 // Wordt aangeroepen na elke zet (from/to voor de animatie, -1 = geen animatie).
 @property (nonatomic, copy) void (^onChange)(GameManager *game, int from, int to);
+// Meegroeiende bot: adaptive = YES gebruikt adaptiveStrength (0-100) in plaats van botLevel.
+@property (nonatomic) BOOL adaptive;
+@property (nonatomic) NSInteger adaptiveStrength;
+@property (nonatomic) BOOL resultCounted;   // uitslag al verwerkt voor de meegroeiende bot
+// Opslaan van 1-tegen-1-partijen.
+@property (nonatomic, copy) NSString *saveId;
+@property (nonatomic, copy) NSString *saveName;
+- (NSString *)initialFEN;
+- (NSArray *)uciMoves;
+- (void)loadMoves:(NSArray *)uciMoves;
 // Zetbeoordeling aan of uit (kies je voor het potje begint).
 @property (nonatomic) BOOL ratingEnabled;
 // Wordt aangeroepen als een zetbeoordeling klaar is.
