@@ -36,6 +36,14 @@ Aantallen: 43 mat in 1, 24 mat in 2, 50 eindspel-reeksen ("vind de juiste zetten
 tegen de bot. 95 puzzels komen uit de [lichess-puzzeldatabase](https://database.lichess.org/#puzzles)
 (CC0, vrij te gebruiken): populaire puzzels met een rating tot ongeveer 1700, van makkelijk naar moeilijk.
 
+### Puzzels downloaden
+
+Bovenaan de puzzellijst staat "Meer puzzels downloaden (gratis)". De app haalt dan via
+`/api/puzzle/batch/{soort}` van lichess.org 10, 25 of 50 puzzels op (zonder account), in de soort
+gemengd, mat in 1, mat in 2 of eindspel en een gekozen moeilijkheid. De partij-notatie wordt met
+`ce_parse_san` nagespeeld tot de puzzelstelling. De puzzels worden bewaard in
+`Documents/gedownloade_puzzels.json` (maximaal 2000) en werken daarna offline.
+
 ## 1 tegen 1 opslaan
 
 Tik tijdens een 1-tegen-1-partij op Opslaan. Daarna wordt de partij na elke zet vanzelf bijgewerkt.

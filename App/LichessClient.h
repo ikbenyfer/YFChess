@@ -27,6 +27,10 @@
 - (void)request:(NSString *)method path:(NSString *)path form:(NSDictionary *)form
      completion:(void (^)(NSInteger status, id json, NSString *errorText))completion;
 
+// Aanvraag zonder inloggen (openbare gegevens, bijv. puzzels).
+- (void)publicRequest:(NSString *)path
+           completion:(void (^)(NSInteger status, id json, NSString *errorText))completion;
+
 // Doorlopende verbinding (bijv. /api/stream/event).
 - (LichessStream *)streamPath:(NSString *)path method:(NSString *)method form:(NSDictionary *)form
                        onLine:(void (^)(NSDictionary *obj))onLine

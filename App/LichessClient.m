@@ -214,6 +214,27 @@ didReceiveResponse:(NSURLResponse *)response
     [task resume];
 }
 
+- (void)publicRequest:(NSString *)path
+           completion:(void (^)(NSInteger, id, NSString *))completion {
+    NSString *saved = _token;
+    _token = nil;   // zonder token versturen
+    NSMutableURLRequest *req = [self requestFor:@"GET" path:path form:nil accept:@"application/json"];
+    _token = saved;
+    req.timeoutInterval = 45;
+    NSURLSessionDataTask *task = [[NSURLSession sharedSession] dataTaskWithRequest:req
+        completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
+            NSInteger status = [response isKindOfClass:[NSHTTPURLResponse class]] ? ((NSHTTPURLResponse *)response).statusCode : 0;
+            id json = data.length ? [NSJSONSerialization JSONObjectWithData:data options:0 error:nil] : nil;
+            NSString *text = nil;
+            if (error) text = [LichessClient describeError:error];
+            else if (status < 200 || status >= 300) text = ErrorFromBody(data, status);
+            dispatch_async(dispatch_get_main_queue(), ^{
+                if (completion) completion(status, json, text);
+            });
+        }];
+    [task resume];
+}
+
 - (LichessStream *)streamPath:(NSString *)path method:(NSString *)method form:(NSDictionary *)form
                        onLine:(void (^)(NSDictionary *))onLine
                         onEnd:(void (^)(NSInteger, NSString *))onEnd {
