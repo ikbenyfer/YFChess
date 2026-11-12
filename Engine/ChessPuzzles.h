@@ -11,14 +11,17 @@
 extern "C" {
 #endif
 
-enum { CP_MATE = 0, CP_ENDGAME = 1 };
+enum { CP_MATE = 0, CP_ENDGAME = 1, CP_LINE = 2 };
 
 typedef struct {
-    int type;            // CP_MATE of CP_ENDGAME
-    int n;               // mat in n zetten, of (eindspel) maximaal aantal eigen zetten
+    int type;            // CP_MATE, CP_ENDGAME (mat zetten tegen de bot) of CP_LINE (vind de juiste zetten)
+    int n;               // mat in n / max. eigen zetten / aantal eigen zetten in de oplossing
     const char *fen;
     const char *title;   // korte Nederlandse titel
     const char *hint;    // tip in woorden
+    const char *line;    // CP_LINE: oplossing in UCI, om en om jij en de tegenstander
+    const char *last;    // laatste zet van de tegenstander (UCI) om te markeren, of NULL
+    int rating;          // moeilijkheid (lichess-puzzelrating), 0 = onbekend
 } CPPuzzle;
 
 int cp_count(void);

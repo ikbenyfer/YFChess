@@ -459,7 +459,7 @@ static void test_move_rating(void) {
 
 static void test_puzzles(void) {
     printf("[puzzels]\n");
-    int mates = 0, endgames = 0;
+    int mates = 0, endgames = 0, lineCount = 0, mate1 = 0, mate2 = 0;
     for (int i = 0; i < cp_count(); i++) {
         const CPPuzzle *pz = cp_get(i);
         CEPosition p;
@@ -469,6 +469,7 @@ static void test_puzzles(void) {
         CHECK(ce_status(&p, NULL, 0) == CE_ONGOING, "puzzel %d: partij loopt nog", i);
         if (pz->type == CP_MATE) {
             mates++;
+            if (pz->n == 1) mate1++; else mate2++;
             CHECK(cb_mate_in(&p, pz->n), "puzzel %d (%s): mat in %d bestaat", i, pz->title, pz->n);
             if (pz->n > 1) CHECK(!cb_mate_in(&p, pz->n - 1), "puzzel %d (%s): niet korter dan %d", i, pz->title, pz->n);
             CEMove m;
@@ -482,12 +483,35 @@ static void test_puzzles(void) {
                 ce_make(&q, d);
                 CHECK(cb_mate_in(&q, 1), "puzzel %d: na verdediging nog mat in 1", i);
             }
+        } else if (pz->type == CP_LINE) {
+            lineCount++;
+            // Speel de oplossing na: elke zet moet legaal zijn.
+            CEPosition q = p;
+            char buf[512];
+            snprintf(buf, sizeof buf, "%s", pz->line ? pz->line : "");
+            int plies = 0, legalAll = 1;
+            for (char *tok = strtok(buf, " "); tok; tok = strtok(NULL, " ")) {
+                CEMove m;
+                if (!ce_parse_uci(&q, tok, &m)) { legalAll = 0; break; }
+                ce_make(&q, m);
+                plies++;
+            }
+            CHECK(legalAll, "eindspel %d (%s): oplossing is legaal", i, pz->title);
+            CHECK(plies % 2 == 1, "eindspel %d: oplossing eindigt met een eigen zet", i);
+            CHECK((plies + 1) / 2 == pz->n, "eindspel %d: aantal eigen zetten klopt", i);
+            if (pz->last) {
+                CEPosition before;
+                CHECK(strlen(pz->last) >= 4, "eindspel %d: laatste zet leesbaar", i);
+                (void)before;
+            }
         } else {
             endgames++;
             CHECK(pz->n >= 10, "eindspel %d: genoeg zetten", i);
         }
     }
-    CHECK(mates >= 20 && endgames >= 4, "genoeg puzzels (%d mat, %d eindspel)", mates, endgames);
+    CHECK(mate1 >= 40 && mate2 >= 24 && endgames >= 4 && lineCount >= 50,
+          "genoeg puzzels (%d mat in 1, %d mat in 2, %d eindspel tegen bot, %d eindspel-reeksen)", mate1, mate2, endgames, lineCount);
+    printf("  %d mat in 1, %d mat in 2, %d eindspel tegen bot, %d eindspel-reeksen\n", mate1, mate2, endgames, lineCount);
     // Een foute zet wordt herkend.
     CEPosition p;
     ce_from_fen(&p, "6k1/5ppp/8/8/8/8/5PPP/3R2K1 w - - 0 1");
