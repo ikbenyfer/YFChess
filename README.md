@@ -19,6 +19,22 @@ Gemaakt in Objective-C + UIKit en gebouwd met Theos op GitHub Actions.
 - **Instellingen**: licht/donker thema, animaties, legale zetten tonen, coördinaten,
   botniveau. Alles wordt bewaard in NSUserDefaults.
 
+## Zetbeoordeling
+
+Bij spelen tegen de bot, 1 tegen 1 en Custom kun je vóór het potje de zetbeoordeling aan- of uitzetten
+(ook bij Instellingen). Na elke zet zoekt de bot (3 zetten diep) de beste zet en vergelijkt die met jouw zet.
+Het verschil in winstkans bepaalt het oordeel: ★ Beste zet, ! Uitstekend, ✓ Goed, ?! Onnauwkeurig, ? Fout,
+?? Blunder of □ Enige zet. Daarnaast zie je de betere zet en je nauwkeurigheid in procenten.
+
+## Online spelen (lichess.org)
+
+Via de officiële Board API van lichess.org. Inloggen gaat met een persoonlijk API-token
+(rechten `board:play` en `challenge:write`), te maken op lichess.org/account/oauth/token.
+Het token staat in de sleutelhanger van de iPad (of, als die niet werkt bij een niet-ondertekende app,
+in de app-instellingen). Mogelijk: een tegenstander zoeken (rapid/klassiek), tegen de lichess-computer
+(niveau 1-8), een vriend uitdagen, uitdagingen accepteren, opgeven, remise en afbreken.
+Chess.com kan niet: hun openbare API kan alleen gegevens lezen, geen zetten doen.
+
 ## Stukken
 
 In Instellingen kies je de stukken (Klassiek, Modern of 3D) en de bordkleur (bruin, groen, blauw, grijs).

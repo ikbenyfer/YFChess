@@ -58,7 +58,7 @@ enum { SecDisplay = 0, SecLook, SecBot, SecPositions, SecCount };
         return @"Klassiek = de oude schaaktekens. Modern: stukken van Colin M.L. Burnett (GPLv2+). "
                @"3D: “Staunty” van sadsnake1 (CC BY-NC-SA 4.0). Beide sets komen van lichess.org en zitten in de app (geen internet nodig).";
     if (section == SecBot) return @"1 = beginner, 5 = sterkst. Je kunt dit ook kiezen bij Spelen tegen bot.";
-    if (section == SecPositions) return @"YF Schaak werkt helemaal offline. Alles wordt alleen op dit apparaat bewaard.";
+    if (section == SecPositions) return @"Alles wordt alleen op dit apparaat bewaard. Internet is alleen nodig voor Online spelen (lichess).";
     return nil;
 }
 

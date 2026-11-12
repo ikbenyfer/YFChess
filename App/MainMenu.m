@@ -10,6 +10,7 @@
 #import "LocalMultiplayer.h"
 #import "ChessClock.h"
 #import "SettingsViewController.h"
+#import "Online.h"
 
 @implementation MainMenuViewController {
     PieceView *_logo;
@@ -29,13 +30,13 @@
     _titleLabel.textAlignment = NSTextAlignmentCenter;
     [self.view addSubview:_titleLabel];
     _subtitle = [YFUI labelWithSize:[YFUI isPad] ? 18 : 14 bold:NO];
-    _subtitle.text = @"Klassiek schaken — helemaal offline";
+    _subtitle.text = @"Klassiek schaken — offline en online";
     _subtitle.textAlignment = NSTextAlignmentCenter;
     [self.view addSubview:_subtitle];
 
     NSArray *titles = @[ @"♚  Spelen tegen bot", @"♛  Custom chess", @"♞  Lokaal 1 tegen 1",
-                         @"⏱  Schaakklok", @"⚙  Instellingen" ];
-    SEL actions[5] = { @selector(botTapped), @selector(customTapped), @selector(localTapped),
+                         @"🌐  Online spelen (lichess)", @"⏱  Schaakklok", @"⚙  Instellingen" ];
+    SEL actions[6] = { @selector(botTapped), @selector(customTapped), @selector(localTapped), @selector(onlineTapped),
                        @selector(clockTapped), @selector(settingsTapped) };
     NSMutableArray *bs = [NSMutableArray array];
     for (NSUInteger i = 0; i < titles.count; i++) {
@@ -96,11 +97,11 @@
     [super viewDidLayoutSubviews];
     CGFloat W = self.view.bounds.size.width, H = self.view.bounds.size.height;
     BOOL pad = [YFUI isPad];
-    CGFloat bh = pad ? 70 : 54;
+    CGFloat bh = pad ? 62 : 50;
     CGFloat sp = pad ? 16 : 10;
     CGFloat logo = pad ? 130 : (H < 500 ? 60 : 90);
     CGFloat titleH = pad ? 56 : 40, subH = pad ? 26 : 20;
-    CGFloat contentH = logo + titleH + subH + 24 + 5 * bh + 4 * sp;
+    CGFloat contentH = logo + titleH + subH + 24 + _buttons.count * bh + (_buttons.count - 1) * sp;
     CGFloat y = MAX(24, (H - contentH) / 2.0);
     CGFloat colW = MIN(W - 40, pad ? 460 : 380);
     CGFloat x = (W - colW) / 2.0;
@@ -134,6 +135,10 @@
 
 - (void)clockTapped {
     [self.navigationController pushViewController:[[ChessClockViewController alloc] init] animated:YES];
+}
+
+- (void)onlineTapped {
+    [self.navigationController pushViewController:[[OnlineViewController alloc] init] animated:YES];
 }
 
 - (void)settingsTapped {
