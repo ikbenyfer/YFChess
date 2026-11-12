@@ -89,7 +89,7 @@
     [_panel addSubview:_restartButton];
     [_panel addSubview:_flipButton];
 
-    _spinner = [[UIActivityIndicatorView alloc] initWithActivityIndicatorViewStyle:UIActivityIndicatorViewStyleGray];
+    _spinner = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleGray];
     _spinner.hidesWhenStopped = YES;
     [_panel addSubview:_spinner];
 

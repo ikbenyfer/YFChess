@@ -21,9 +21,11 @@ static NSTimeInterval Now(void) {
     static dispatch_once_t once;
     dispatch_once(&once, ^{
         c = [[ChessClock alloc] init];
-        SettingsManager *s = [SettingsManager shared];
-        [c configureBase:s.clockBaseSeconds increment:s.clockIncrementSeconds];
-        [c loadState];
+        // Eerst de bewaarde stand terugzetten (ook na het afsluiten van de app).
+        if (![c loadState]) {
+            SettingsManager *s = [SettingsManager shared];
+            [c configureBase:s.clockBaseSeconds increment:s.clockIncrementSeconds];
+        }
     });
     return c;
 }
@@ -113,9 +115,9 @@ static NSTimeInterval Now(void) {
     [[NSUserDefaults standardUserDefaults] setObject:d forKey:@"clockState"];
 }
 
-- (void)loadState {
+- (BOOL)loadState {
     NSDictionary *d = [[NSUserDefaults standardUserDefaults] dictionaryForKey:@"clockState"];
-    if (!d[@"base"]) return;
+    if (!d[@"base"] || [d[@"base"] doubleValue] <= 0) return NO;
     _baseTime = [d[@"base"] doubleValue];
     _increment = [d[@"inc"] doubleValue];
     _remaining[0] = [d[@"r0"] doubleValue];
@@ -128,8 +130,8 @@ static NSTimeInterval Now(void) {
     _flagged = [d[@"flagged"] intValue];
     _started = [d[@"started"] boolValue];
     _segmentStart = [d[@"segStart"] doubleValue];
-    if (_baseTime <= 0) [self configureBase:300 increment:0];
     [self update];
+    return YES;
 }
 
 + (NSString *)format:(NSTimeInterval)t {

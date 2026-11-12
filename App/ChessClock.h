@@ -24,7 +24,7 @@
 - (void)reset;
 - (void)update;                  // controleert of iemand door zijn tijd heen is
 - (void)saveState;
-- (void)loadState;
+- (BOOL)loadState;   // NO als er niets bewaard was
 
 + (NSString *)format:(NSTimeInterval)t;
 

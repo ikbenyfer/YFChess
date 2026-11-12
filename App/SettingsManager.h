@@ -2,6 +2,7 @@
 // YF Schaak - instellingen, thema-kleuren en opgeslagen posities (NSUserDefaults).
 
 #import <UIKit/UIKit.h>
+#import <QuartzCore/QuartzCore.h>
 
 @interface SettingsManager : NSObject
 

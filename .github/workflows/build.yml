@@ -91,7 +91,7 @@ jobs:
         run: |
           sed -i 's/\r$//' layout/DEBIAN/postinst
           chmod 755 layout/DEBIAN/postinst
-          make clean package FINALPACKAGE=1 messages=yes
+          make -k clean package FINALPACKAGE=1 messages=yes
 
       - name: Controleren (ARMv7 en iOS 9)
         working-directory: project
