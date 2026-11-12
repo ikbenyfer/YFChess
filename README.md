@@ -26,6 +26,14 @@ willekeurige zetten, soms zelfs bewust de slechtste) tot 100. Win je, dan gaat h
 sterkte 30, daarna +8); wint hij, dan gaat hij omlaag (-8 / -10); remise is +3. De sterkte en de telling
 worden bewaard en kunnen worden teruggezet.
 
+## Elo
+
+- **Speel tegen een Elo**: de bot krijgt een sterkte van 0-100 via `sterkte = (Elo - 200) / 16`
+  (een schatting: sterkte 0 is ongeveer 200 Elo, sterkte 100 ongeveer 1800 Elo).
+- **Elo-test**: 3 potjes (wit, zwart, wit). Eerste potje tegen ~800 Elo, daarna +/-400 en +/-200
+  afhankelijk van de uitslag. Uitslag = prestatierating: gemiddelde Elo van de tegenstanders
+  + 400 x (winst - verlies) / 3, afgerond op 50.
+
 ## Puzzels
 
 Mat in 1, mat in 2 en eindspel-oefeningen (zet mat tegen de bot binnen een aantal zetten). Elke puzzel

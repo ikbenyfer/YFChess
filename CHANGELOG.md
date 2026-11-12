@@ -3,6 +3,11 @@
 Elke versie hieronder wordt automatisch als release op GitHub gezet (met de `.ipa` en `.deb`).
 Het versienummer komt uit het bestand `control`.
 
+## 1.9.0
+- Nieuw in Spelen tegen bot: "Speel tegen een Elo". Vul een Elo-getal in (100 t/m 2000) en de bot speelt ongeveer zo sterk.
+- Nieuw: Elo-test. Speel 3 potjes; win je, dan wordt het volgende potje moeilijker, verlies je, dan makkelijker. Daarna zegt de app hoeveel Elo jij ongeveer bent, en dat getal wordt meteen ingevuld bij "Speel tegen een Elo".
+- Opgeven-knop in potjes tegen de bot.
+
 ## 1.8.0
 - Nieuw botniveau 0 "super makkelijk": doet meestal zomaar een zet en geeft vaak stukken weg. Te kiezen bij Spelen tegen bot en bij Instellingen.
 

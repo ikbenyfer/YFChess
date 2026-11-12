@@ -29,6 +29,17 @@
 @property (nonatomic) NSInteger adaptiveDraws;
 + (NSString *)strengthName:(NSInteger)strength;
 
+// Elo: spelen tegen een gekozen Elo en de Elo-test (3 potjes).
+@property (nonatomic) NSInteger playElo;            // gekozen Elo voor "Speel tegen Elo"
+@property (nonatomic) NSInteger lastEloEstimate;    // uitslag van de laatste Elo-test (0 = nog geen)
++ (NSInteger)strengthForElo:(NSInteger)elo;         // Elo -> botsterkte 0-100 (schatting)
+- (NSArray *)eloTestOpponents;                      // Elo van de bot per gespeeld testpotje
+- (NSArray *)eloTestScores;                         // 1 = gewonnen, 0.5 = remise, 0 = verloren
+- (void)recordEloTestGame:(NSInteger)opponentElo score:(double)score;
+- (NSInteger)nextEloTestOpponent;
+- (NSInteger)eloTestEstimate;
+- (void)resetEloTest;
+
 - (void)save;
 + (NSArray *)pieceSetNames;
 + (NSArray *)boardThemeNames;

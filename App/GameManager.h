@@ -17,7 +17,7 @@ typedef NS_ENUM(NSInteger, GameMode) {
 
 @property (nonatomic, readonly) CEPosition position;
 @property (nonatomic, readonly) GameMode mode;
-@property (nonatomic, readonly) int humanColor;
+@property (nonatomic) int humanColor;
 @property (nonatomic, readonly) NSInteger botLevel;
 @property (nonatomic, readonly) CEStatus status;
 @property (nonatomic, readonly) BOOL botThinking;
@@ -29,6 +29,11 @@ typedef NS_ENUM(NSInteger, GameMode) {
 
 // Wordt aangeroepen na elke zet (from/to voor de animatie, -1 = geen animatie).
 @property (nonatomic, copy) void (^onChange)(GameManager *game, int from, int to);
+// Soort potje tegen de bot: 0 = vast niveau, 1 = meegroeiend, 2 = tegen een Elo, 3 = Elo-test.
+@property (nonatomic) NSInteger playKind;
+@property (nonatomic) NSInteger opponentElo;        // bij soort 2 en 3
+@property (nonatomic, readonly) BOOL resigned;
+- (void)resign;
 // Meegroeiende bot: adaptive = YES gebruikt adaptiveStrength (0-100) in plaats van botLevel.
 @property (nonatomic) BOOL adaptive;
 @property (nonatomic) NSInteger adaptiveStrength;

@@ -57,6 +57,7 @@
     _lastTo = -1;
     _startFullmove = _initial.fullmove;
     _resultCounted = NO;
+    _resigned = NO;
     _startSide = _initial.side;
     [self updateStatus];
 }
@@ -106,7 +107,15 @@
     return _pos.side == _humanColor;
 }
 
+- (void)resign {
+    if ([self isGameOver]) return;
+    [self stopBot];
+    _resigned = YES;
+    if (self.onChange) self.onChange(self, -1, -1);
+}
+
 - (BOOL)isGameOver {
+    if (_resigned) return YES;
     return _status != CE_ONGOING;
 }
 
@@ -241,6 +250,7 @@
 
 - (void)undo {
     [self stopBot];
+    _resigned = NO;
     if (!_records.count) return;
     [self popRecord];
     // Tegen de bot: terug tot jij weer aan zet bent.
@@ -311,6 +321,7 @@
 }
 
 - (NSString *)resultTitle {
+    if (_resigned) return @"Je hebt opgegeven. De bot wint.";
     switch (_status) {
         case CE_CHECKMATE: {
             int winner = _pos.side ^ 1;

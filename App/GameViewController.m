@@ -23,6 +23,7 @@
     YFButton *_restartButton;
     YFButton *_flipButton;
     YFButton *_saveButton;
+    YFButton *_resignButton;
     UIActivityIndicatorView *_spinner;
     int _selected;
     NSUInteger _announcedPly;
@@ -42,14 +43,7 @@
 - (void)viewDidLoad {
     [super viewDidLoad];
     SettingsManager *s = [SettingsManager shared];
-    if (_game.mode == GameModeBot) {
-        if (_game.adaptive)
-            self.title = [NSString stringWithFormat:@"Meegroeiende bot (sterkte %ld)", (long)_game.adaptiveStrength];
-        else
-            self.title = [NSString stringWithFormat:@"Tegen de bot (niveau %ld)", (long)_game.botLevel];
-    } else {
-        self.title = @"1 tegen 1";
-    }
+    [self updateTitle];
 
     _board = [[ChessBoardView alloc] initWithFrame:CGRectMake(0, 0, 320, 320)];
     _board.delegate = self;
@@ -106,6 +100,14 @@
     if (_game.mode == GameModeLocal) {
         _saveButton = [YFUI buttonWithTitle:@"⬇ Opslaan" target:self action:@selector(saveTapped)];
         [_panel addSubview:_saveButton];
+    } else {
+        _resignButton = [YFUI buttonWithTitle:@"⚑ Opgeven" target:self action:@selector(resignTapped)];
+        [_panel addSubview:_resignButton];
+    }
+    if (_game.playKind == 3) {
+        // Elo-test: niet terugnemen of opnieuw beginnen, dat zou de test oneerlijk maken.
+        _undoButton.hidden = YES;
+        _restartButton.hidden = YES;
     }
 
     _spinner = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleGray];
@@ -196,7 +198,7 @@
     y += lineH + 8;
     CGFloat bh = [YFUI isPad] ? 56 : 46;
     NSArray *buttons = [self panelButtons];
-    NSInteger cols = buttons.count == 4 ? 2 : 3;
+    NSInteger cols = buttons.count == 3 ? 3 : 2;
     y = [YFUI layoutViews:buttons x:pad y:y width:pw - 2 * pad
                itemHeight:bh columns:cols spacing:8] + 10;
     CGFloat mh = ph - y - pad;
@@ -225,7 +227,94 @@
 
 - (NSArray *)panelButtons {
     if (_saveButton) return @[_undoButton, _restartButton, _flipButton, _saveButton];
+    if (_game.playKind == 3) return @[_resignButton, _flipButton];
+    if (_resignButton) return @[_undoButton, _restartButton, _resignButton, _flipButton];
     return @[_undoButton, _restartButton, _flipButton];
+}
+
+- (void)updateTitle {
+    if (_game.mode != GameModeBot) { self.title = @"1 tegen 1"; return; }
+    switch (_game.playKind) {
+        case 1: self.title = [NSString stringWithFormat:@"Meegroeiende bot (sterkte %ld)", (long)_game.adaptiveStrength]; break;
+        case 2: self.title = [NSString stringWithFormat:@"Tegen de bot (~%ld Elo)", (long)_game.opponentElo]; break;
+        case 3: self.title = [NSString stringWithFormat:@"Elo-test: potje %lu van 3 (bot ~%ld Elo)",
+                              (unsigned long)[SettingsManager shared].eloTestScores.count + 1, (long)_game.opponentElo]; break;
+        default: self.title = [NSString stringWithFormat:@"Tegen de bot (niveau %ld)", (long)_game.botLevel]; break;
+    }
+}
+
+- (void)resignTapped {
+    if ([_game isGameOver]) return;
+    UIAlertController *a = [UIAlertController alertControllerWithTitle:@"Opgeven?" message:@"De bot wint dan deze partij."
+                                                        preferredStyle:UIAlertControllerStyleAlert];
+    [a addAction:[UIAlertAction actionWithTitle:@"Annuleren" style:UIAlertActionStyleCancel handler:nil]];
+    [a addAction:[UIAlertAction actionWithTitle:@"Opgeven" style:UIAlertActionStyleDestructive handler:^(UIAlertAction *act) {
+        self->_selected = -1;
+        [self->_game resign];
+    }]];
+    [self presentViewController:a animated:YES completion:nil];
+}
+
+// 1 = jij wint, 0.5 = remise, 0 = de bot wint.
+- (double)humanScore {
+    if (_game.resigned) return 0;
+    if (_game.status == CE_CHECKMATE) {
+        int winner = _game.position.side ^ 1;
+        return winner == _game.humanColor ? 1.0 : 0.0;
+    }
+    return 0.5;
+}
+
+#pragma mark - Elo-test
+
+// Verwerkt een testpotje en laat zien wat er volgt.
+- (void)showEloTestResult {
+    SettingsManager *s = [SettingsManager shared];
+    if (!_game.resultCounted) {
+        _game.resultCounted = YES;
+        [s recordEloTestGame:_game.opponentElo score:[self humanScore]];
+    }
+    double score = [self humanScore];
+    NSString *res = score > 0.75 ? @"gewonnen" : (score < 0.25 ? @"verloren" : @"remise");
+    NSUInteger played = s.eloTestScores.count;
+    UIAlertController *a;
+    if (played < 3) {
+        NSInteger next = [s nextEloTestOpponent];
+        NSString *msg = [NSString stringWithFormat:@"%@\n\nPotje %lu van 3: %@.\nHet volgende potje speel je tegen een bot van ongeveer %ld Elo.",
+                         [_game resultTitle], (unsigned long)played, res, (long)next];
+        a = [UIAlertController alertControllerWithTitle:@"Elo-test" message:msg preferredStyle:UIAlertControllerStyleAlert];
+        [a addAction:[UIAlertAction actionWithTitle:@"Bekijk bord" style:UIAlertActionStyleCancel handler:nil]];
+        [a addAction:[UIAlertAction actionWithTitle:@"▶ Volgend potje" style:UIAlertActionStyleDefault handler:^(UIAlertAction *act) {
+            [self startNextEloTestGame];
+        }]];
+    } else {
+        NSInteger elo = [s eloTestEstimate];
+        s.lastEloEstimate = elo;
+        s.playElo = elo;
+        [s save];
+        [s resetEloTest];
+        NSString *msg = [NSString stringWithFormat:@"%@\n\nPotje 3 van 3: %@.\n\nJij bent ongeveer %ld Elo!\n\n"
+                         @"Dit getal staat nu ingevuld bij “Speel tegen een Elo”. Het is een schatting na 3 potjes.",
+                         [_game resultTitle], res, (long)elo];
+        a = [UIAlertController alertControllerWithTitle:@"Elo-test klaar" message:msg preferredStyle:UIAlertControllerStyleAlert];
+        [a addAction:[UIAlertAction actionWithTitle:@"Bekijk bord" style:UIAlertActionStyleCancel handler:nil]];
+        [a addAction:[UIAlertAction actionWithTitle:@"Terug naar het botmenu" style:UIAlertActionStyleDefault handler:^(UIAlertAction *act) {
+            [self.navigationController popViewControllerAnimated:YES];
+        }]];
+    }
+    [self presentViewController:a animated:YES completion:nil];
+}
+
+- (void)startNextEloTestGame {
+    SettingsManager *s = [SettingsManager shared];
+    NSInteger elo = [s nextEloTestOpponent];
+    _game.opponentElo = elo;
+    _game.adaptiveStrength = [SettingsManager strengthForElo:elo];
+    _game.humanColor = (s.eloTestScores.count % 2 == 0) ? CE_WHITE : CE_BLACK;   // om en om wit en zwart
+    [_board setFlipped:_game.humanColor == CE_BLACK animated:s.animations];
+    _selected = -1;
+    [self updateTitle];
+    [_game restart];
 }
 
 #pragma mark - Opslaan (1 tegen 1)
@@ -273,15 +362,14 @@
 
 // Verwerkt de uitslag: jij wint = bot sterker, bot wint = bot zwakker. Geeft uitleg terug.
 - (NSString *)countAdaptiveResult {
-    if (!_game.adaptive || _game.resultCounted) return nil;
+    if (_game.playKind != 1 || _game.resultCounted) return nil;
     _game.resultCounted = YES;
     SettingsManager *s = [SettingsManager shared];
     NSInteger before = s.adaptiveStrength, after = before;
-    CEPosition p = _game.position;
+    double score = [self humanScore];
     NSString *text;
-    if (_game.status == CE_CHECKMATE) {
-        int winner = p.side ^ 1;
-        if (winner == _game.humanColor) {
+    if (score < 0.25 || score > 0.75) {
+        if (score > 0.75) {
             after = MIN(100, before + (before < 30 ? 12 : 8));
             s.adaptiveWins++;
             text = @"Jij wint, dus de bot wordt sterker.";
@@ -303,10 +391,8 @@
 
 - (void)startNewGame {
     _selected = -1;
-    if (_game.adaptive) {
-        _game.adaptiveStrength = [SettingsManager shared].adaptiveStrength;
-        self.title = [NSString stringWithFormat:@"Meegroeiende bot (sterkte %ld)", (long)_game.adaptiveStrength];
-    }
+    if (_game.playKind == 1) _game.adaptiveStrength = [SettingsManager shared].adaptiveStrength;
+    [self updateTitle];
     [_game restart];
 }
 
@@ -471,6 +557,10 @@
     if (!self.view.window) return;
     _announced = YES;
     _announcedPly = _game.plyCount;
+    if (_game.playKind == 3) {
+        [self showEloTestResult];
+        return;
+    }
     NSString *msg = [_game resultTitle];
     NSString *adaptiveText = [self countAdaptiveResult];
     if (adaptiveText) msg = [NSString stringWithFormat:@"%@\n\n%@", msg, adaptiveText];

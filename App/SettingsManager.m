@@ -39,6 +39,7 @@ static UIColor *RGB(unsigned int hex) {
             @"clockBase": @300,
             @"clockIncrement": @0,
             @"adaptiveStrength": @0,
+            @"playElo": @800,
         }];
         _darkTheme = [d boolForKey:@"darkTheme"];
         _pieceSet = [d integerForKey:@"pieceSet"];
@@ -65,6 +66,9 @@ static UIColor *RGB(unsigned int hex) {
         _adaptiveWins = [d integerForKey:@"adaptiveWins"];
         _adaptiveLosses = [d integerForKey:@"adaptiveLosses"];
         _adaptiveDraws = [d integerForKey:@"adaptiveDraws"];
+        _playElo = [d integerForKey:@"playElo"];
+        if (_playElo < 100 || _playElo > 2500) _playElo = 800;
+        _lastEloEstimate = [d integerForKey:@"lastEloEstimate"];
     }
     return self;
 }
@@ -88,6 +92,8 @@ static UIColor *RGB(unsigned int hex) {
     [d setInteger:_adaptiveWins forKey:@"adaptiveWins"];
     [d setInteger:_adaptiveLosses forKey:@"adaptiveLosses"];
     [d setInteger:_adaptiveDraws forKey:@"adaptiveDraws"];
+    [d setInteger:_playElo forKey:@"playElo"];
+    [d setInteger:_lastEloEstimate forKey:@"lastEloEstimate"];
     if (_editorDraftFEN) [d setObject:_editorDraftFEN forKey:@"editorDraft"];
     else [d removeObjectForKey:@"editorDraft"];
     [d synchronize];
@@ -131,6 +137,66 @@ static UIColor *RGB(unsigned int hex) {
     if (s < 70) return @"gemiddeld";
     if (s < 85) return @"sterk";
     return @"heel sterk";
+}
+
+#pragma mark - Elo
+
+// Schatting: sterkte 0 is ongeveer 200 Elo, sterkte 100 ongeveer 1800 Elo.
++ (NSInteger)strengthForElo:(NSInteger)elo {
+    NSInteger s = (elo - 200) / 16;
+    return MAX(0, MIN(100, s));
+}
+
+- (NSArray *)eloTestOpponents {
+    NSArray *a = [[NSUserDefaults standardUserDefaults] arrayForKey:@"eloTestOpponents"];
+    return a ? a : @[];
+}
+
+- (NSArray *)eloTestScores {
+    NSArray *a = [[NSUserDefaults standardUserDefaults] arrayForKey:@"eloTestScores"];
+    return a ? a : @[];
+}
+
+- (void)recordEloTestGame:(NSInteger)opponentElo score:(double)score {
+    NSUserDefaults *d = [NSUserDefaults standardUserDefaults];
+    [d setObject:[[self eloTestOpponents] arrayByAddingObject:@(opponentElo)] forKey:@"eloTestOpponents"];
+    [d setObject:[[self eloTestScores] arrayByAddingObject:@(score)] forKey:@"eloTestScores"];
+    [d synchronize];
+}
+
+- (NSInteger)nextEloTestOpponent {
+    NSArray *opp = [self eloTestOpponents], *sc = [self eloTestScores];
+    NSUInteger n = MIN(opp.count, sc.count);
+    if (n == 0) return 800;
+    NSInteger last = [opp[n - 1] integerValue];
+    double score = [sc[n - 1] doubleValue];
+    NSInteger step = n == 1 ? 400 : 200;
+    NSInteger next = last + (score > 0.75 ? step : (score < 0.25 ? -step : 0));
+    return MAX(200, MIN(1800, next));
+}
+
+// Prestatierating: gemiddelde van de tegenstanders + 400 x (winst - verlies) / aantal potjes.
+- (NSInteger)eloTestEstimate {
+    NSArray *opp = [self eloTestOpponents], *sc = [self eloTestScores];
+    NSUInteger n = MIN(opp.count, sc.count);
+    if (n == 0) return 0;
+    double sum = 0, wins = 0, losses = 0;
+    for (NSUInteger i = 0; i < n; i++) {
+        sum += [opp[i] doubleValue];
+        double s = [sc[i] doubleValue];
+        if (s > 0.75) wins++;
+        else if (s < 0.25) losses++;
+    }
+    double perf = sum / n + 400.0 * (wins - losses) / n;
+    NSInteger rounded = (NSInteger)(round(perf / 50.0) * 50.0);
+    return MAX(100, MIN(2200, rounded));
+}
+
+- (void)resetEloTest {
+    NSUserDefaults *d = [NSUserDefaults standardUserDefaults];
+    [d removeObjectForKey:@"eloTestOpponents"];
+    [d removeObjectForKey:@"eloTestScores"];
+    [d synchronize];
 }
 
 #pragma mark - Partijen

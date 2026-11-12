@@ -172,6 +172,14 @@
     UILabel *_adaptiveInfo;
     YFButton *_adaptiveButton;
     YFButton *_adaptiveReset;
+    UILabel *_eloTitle;
+    UILabel *_eloInfo;
+    YFButton *_eloPlayButton;
+    YFButton *_eloEditButton;
+    UILabel *_testTitle;
+    UILabel *_testInfo;
+    YFButton *_testButton;
+    YFButton *_testResetButton;
     UILabel *_colorLabel;
     UISegmentedControl *_colorControl;
     UILabel *_levelLabel;
@@ -203,6 +211,23 @@
     _adaptiveReset = [YFUI buttonWithTitle:@"Terugzetten naar ultra slecht" target:self action:@selector(adaptiveResetTapped)];
     _adaptiveReset.titleLabel.font = [UIFont systemFontOfSize:fs - 3];
     [_scroll addSubview:_adaptiveReset];
+
+    _eloTitle = [YFUI labelWithSize:fs bold:YES];
+    _eloTitle.text = @"Speel tegen een Elo";
+    _eloInfo = [YFUI labelWithSize:fs - 3 bold:NO];
+    _eloInfo.text = @"Vul een Elo-getal in (100 t/m 2000). De bot probeert ongeveer zo sterk te spelen. "
+                    @"Weet je je Elo niet? Doe dan eerst de Elo-test hieronder.";
+    _eloPlayButton = [YFUI buttonWithTitle:@"" target:self action:@selector(eloPlayTapped)];
+    _eloPlayButton.primary = YES;
+    _eloEditButton = [YFUI buttonWithTitle:@"✎ Elo-getal invullen" target:self action:@selector(eloEditTapped)];
+    _testTitle = [YFUI labelWithSize:fs bold:YES];
+    _testTitle.text = @"Elo-test (3 potjes)";
+    _testInfo = [YFUI labelWithSize:fs - 3 bold:NO];
+    _testButton = [YFUI buttonWithTitle:@"" target:self action:@selector(eloTestTapped)];
+    _testResetButton = [YFUI buttonWithTitle:@"Test opnieuw beginnen" target:self action:@selector(eloTestResetTapped)];
+    _testResetButton.titleLabel.font = [UIFont systemFontOfSize:fs - 3];
+    for (UIView *v in @[_eloTitle, _eloInfo, _eloPlayButton, _eloEditButton, _testTitle, _testInfo, _testButton, _testResetButton])
+        [_scroll addSubview:v];
     _colorLabel = [YFUI labelWithSize:fs bold:YES];
     _colorLabel.text = @"Met welke kleur speel jij?";
     [_scroll addSubview:_colorLabel];
@@ -246,6 +271,10 @@
     _adaptiveInfo.textColor = s.secondaryTextColor;
     [_adaptiveButton applyTheme];
     [_adaptiveReset applyTheme];
+    for (UILabel *l in @[_eloTitle, _testTitle]) l.textColor = s.textColor;
+    for (UILabel *l in @[_eloInfo, _testInfo]) l.textColor = s.secondaryTextColor;
+    for (YFButton *b in @[_eloPlayButton, _eloEditButton, _testButton, _testResetButton]) [b applyTheme];
+    [self updateElo];
     [self updateAdaptive];
     _ratingSwitch.onTintColor = s.accentColor;
     _ratingSwitch.on = s.moveRating;
@@ -272,6 +301,17 @@
     _adaptiveInfo.frame = CGRectMake(x, y, colW, ceil(ai.height)); y += ceil(ai.height) + 8;
     _adaptiveButton.frame = CGRectMake(x, y, colW, bh); y += bh + 8;
     _adaptiveReset.frame = CGRectMake(x + colW * 0.25, y, colW * 0.5, 36); y += 36 + 26;
+    _eloTitle.frame = CGRectMake(x, y, colW, 28); y += 30;
+    CGSize ei = [_eloInfo sizeThatFits:CGSizeMake(colW, 400)];
+    _eloInfo.frame = CGRectMake(x, y, colW, ceil(ei.height)); y += ceil(ei.height) + 8;
+    [YFUI layoutViews:@[_eloPlayButton, _eloEditButton] x:x y:y width:colW itemHeight:bh columns:2 spacing:8];
+    y += bh + 26;
+    _testTitle.frame = CGRectMake(x, y, colW, 28); y += 30;
+    CGSize ti = [_testInfo sizeThatFits:CGSizeMake(colW, 400)];
+    _testInfo.frame = CGRectMake(x, y, colW, ceil(ti.height)); y += ceil(ti.height) + 8;
+    _testButton.frame = CGRectMake(x, y, colW, bh); y += bh + 8;
+    if (!_testResetButton.hidden) { _testResetButton.frame = CGRectMake(x + colW * 0.25, y, colW * 0.5, 36); y += 36; }
+    y += 26;
     _levelLabel.frame = CGRectMake(x, y, colW, 28); y += 34;
     _levelControl.frame = CGRectMake(x, y, colW, 40); y += 48;
     _levelInfo.frame = CGRectMake(x, y, colW, 48); y += 56;
@@ -296,10 +336,81 @@
     [self.view setNeedsLayout];
 }
 
+- (void)updateElo {
+    SettingsManager *s = [SettingsManager shared];
+    [_eloPlayButton setTitle:[NSString stringWithFormat:@"▶ Speel tegen ~%ld Elo", (long)s.playElo] forState:UIControlStateNormal];
+    NSUInteger played = s.eloTestScores.count;
+    if (played > 0 && played < 3) {
+        [_testButton setTitle:[NSString stringWithFormat:@"▶ Verder met de Elo-test (potje %lu van 3)", (unsigned long)played + 1]
+                     forState:UIControlStateNormal];
+        _testResetButton.hidden = NO;
+    } else {
+        [_testButton setTitle:@"▶ Start de Elo-test" forState:UIControlStateNormal];
+        _testResetButton.hidden = YES;
+    }
+    NSMutableString *t = [NSMutableString stringWithString:
+        @"Speel 3 potjes tegen de bot. Win je, dan wordt het volgende potje moeilijker; verlies je, dan makkelijker. "
+        @"Daarna zegt de app hoeveel Elo jij ongeveer bent. Terugnemen kan niet tijdens de test."];
+    if (s.lastEloEstimate > 0) [t appendFormat:@"\nJouw laatste uitslag: ongeveer %ld Elo.", (long)s.lastEloEstimate];
+    _testInfo.text = t;
+    [self.view setNeedsLayout];
+}
+
+- (void)startStrengthGameKind:(NSInteger)kind elo:(NSInteger)elo color:(int)color {
+    GameManager *g = [[GameManager alloc] initWithFEN:nil mode:GameModeBot humanColor:color botLevel:1];
+    g.adaptive = YES;
+    g.playKind = kind;
+    g.opponentElo = elo;
+    g.adaptiveStrength = [SettingsManager strengthForElo:elo];
+    [self.navigationController pushViewController:[[GameViewController alloc] initWithGame:g] animated:YES];
+}
+
+- (void)eloPlayTapped {
+    [self startStrengthGameKind:2 elo:[SettingsManager shared].playElo color:[self chosenColor]];
+}
+
+- (void)eloEditTapped {
+    UIAlertController *a = [UIAlertController alertControllerWithTitle:@"Elo-getal"
+                                                               message:@"Tegen hoeveel Elo wil je spelen? (100 t/m 2000)"
+                                                        preferredStyle:UIAlertControllerStyleAlert];
+    [a addTextFieldWithConfigurationHandler:^(UITextField *tf) {
+        tf.keyboardType = UIKeyboardTypeNumberPad;
+        tf.text = [NSString stringWithFormat:@"%ld", (long)[SettingsManager shared].playElo];
+    }];
+    __weak UIAlertController *weakAlert = a;
+    [a addAction:[UIAlertAction actionWithTitle:@"Annuleren" style:UIAlertActionStyleCancel handler:nil]];
+    [a addAction:[UIAlertAction actionWithTitle:@"Opslaan" style:UIAlertActionStyleDefault handler:^(UIAlertAction *act) {
+        NSInteger v = [weakAlert.textFields.firstObject.text integerValue];
+        if (v < 100 || v > 2000) {
+            [YFUI showMessage:@"Kies een getal van 100 tot en met 2000." title:@"Ongeldig getal" from:self];
+            return;
+        }
+        SettingsManager *s = [SettingsManager shared];
+        s.playElo = v;
+        [s save];
+        [self updateElo];
+    }]];
+    [self presentViewController:a animated:YES completion:nil];
+}
+
+- (void)eloTestTapped {
+    SettingsManager *s = [SettingsManager shared];
+    if (s.eloTestScores.count >= 3) [s resetEloTest];
+    NSUInteger played = s.eloTestScores.count;
+    int color = (played % 2 == 0) ? CE_WHITE : CE_BLACK;   // om en om wit en zwart
+    [self startStrengthGameKind:3 elo:[s nextEloTestOpponent] color:color];
+}
+
+- (void)eloTestResetTapped {
+    [[SettingsManager shared] resetEloTest];
+    [self updateElo];
+}
+
 - (void)adaptiveTapped {
     SettingsManager *s = [SettingsManager shared];
     GameManager *g = [[GameManager alloc] initWithFEN:nil mode:GameModeBot humanColor:[self chosenColor] botLevel:1];
     g.adaptive = YES;
+    g.playKind = 1;
     g.adaptiveStrength = s.adaptiveStrength;
     [self.navigationController pushViewController:[[GameViewController alloc] initWithGame:g] animated:YES];
 }
