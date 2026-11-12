@@ -11,7 +11,7 @@ include $(THEOS)/makefiles/common.mk
 APPLICATION_NAME = YFChess
 
 YFChess_FILES = $(wildcard Engine/*.c) $(wildcard App/*.m)
-YFChess_FRAMEWORKS = UIKit Foundation CoreGraphics QuartzCore
+YFChess_FRAMEWORKS = UIKit Foundation CoreGraphics QuartzCore Security
 YFChess_CFLAGS = -fobjc-arc -IEngine -IApp -Wno-error -Werror=unguarded-availability -Werror=unguarded-availability-new -Werror=objc-method-access -Werror=incompatible-pointer-types
 
 include $(THEOS_MAKE_PATH)/application.mk

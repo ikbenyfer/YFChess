@@ -294,11 +294,9 @@
     if (_game.mode == GameModeBot) {
         int n = _game.humanColor == CE_WHITE ? nw : nb;
         double a = _game.humanColor == CE_WHITE ? aw : ab;
-        if (n) acc = [NSString stringWithFormat:@"
-Jouw nauwkeurigheid: %.0f%%", a];
+        if (n) acc = [NSString stringWithFormat:@"\nJouw nauwkeurigheid: %.0f%%", a];
     } else if (nw || nb) {
-        acc = [NSString stringWithFormat:@"
-Nauwkeurigheid: Wit %@ • Zwart %@",
+        acc = [NSString stringWithFormat:@"\nNauwkeurigheid: Wit %@ • Zwart %@",
                nw ? [NSString stringWithFormat:@"%.0f%%", aw] : @"—",
                nb ? [NSString stringWithFormat:@"%.0f%%", ab] : @"—"];
     }
