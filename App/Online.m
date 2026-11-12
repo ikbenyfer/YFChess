@@ -524,7 +524,11 @@ static NSString *PlayerName(NSDictionary *p) {
     UITextView *_movesView;
     YFButton *_resignButton;
     YFButton *_drawButton;
-    YFButton *_abortButton;
+    YFButton *_claimButton;
+    UILabel *_actionLabel;
+    BOOL _myDrawOffer;
+    BOOL _oppDrawOffer;
+    NSTimeInterval _claimAt;
     YFButton *_flipButton;
 
     CEPosition _initial;
@@ -594,9 +598,17 @@ static NSString *PlayerName(NSDictionary *p) {
     [_panel addSubview:_movesView];
     _resignButton = [YFUI buttonWithTitle:@"Opgeven" target:self action:@selector(resignTapped)];
     _drawButton = [YFUI buttonWithTitle:@"Remise aanbieden" target:self action:@selector(drawTapped)];
-    _abortButton = [YFUI buttonWithTitle:@"Afbreken" target:self action:@selector(abortTapped)];
+    _claimButton = [YFUI buttonWithTitle:@"\U0001F3C6 Winst opeisen" target:self action:@selector(claimTapped)];
+    _claimButton.primary = YES;
+    _claimButton.hidden = YES;
+    _actionLabel = [YFUI labelWithSize:fs - 1 bold:NO];
+    _actionLabel.textAlignment = NSTextAlignmentCenter;
+    _actionLabel.numberOfLines = 2;
+    _actionLabel.adjustsFontSizeToFitWidth = YES;
+    _actionLabel.minimumScaleFactor = 0.6;
+    [_panel addSubview:_actionLabel];
     _flipButton = [YFUI buttonWithTitle:@"⇅ Draai bord" target:self action:@selector(flipTapped)];
-    for (UIView *b in @[_resignButton, _drawButton, _abortButton, _flipButton]) [_panel addSubview:b];
+    for (UIView *b in @[_resignButton, _drawButton, _claimButton, _flipButton]) [_panel addSubview:b];
     [self render:-1 to:-1];
     [self connect];
 }
@@ -610,7 +622,8 @@ static NSString *PlayerName(NSDictionary *p) {
     for (UILabel *l in @[_topLabel, _bottomLabel, _statusLabel]) l.textColor = s.textColor;
     _movesView.backgroundColor = s.backgroundColor;
     _movesView.textColor = s.textColor;
-    for (YFButton *b in @[_resignButton, _drawButton, _abortButton, _flipButton]) [b applyTheme];
+    for (YFButton *b in @[_resignButton, _drawButton, _claimButton, _flipButton]) [b applyTheme];
+    _actionLabel.textColor = s.secondaryTextColor;
     _board.showCoordinates = s.showCoordinates;
     [_board refreshTheme];
     if (!_timer) {
@@ -652,10 +665,13 @@ static NSString *PlayerName(NSDictionary *p) {
     CGFloat y = pad;
     _topLabel.frame = CGRectMake(pad, y, pw - 2 * pad, lh * 1.5); y += lh * 1.5 + 4;
     _statusLabel.frame = CGRectMake(pad, y, pw - 2 * pad, lh * 1.6); y += lh * 1.6 + 4;
-    _bottomLabel.frame = CGRectMake(pad, y, pw - 2 * pad, lh * 1.5); y += lh * 1.5 + 8;
+    _bottomLabel.frame = CGRectMake(pad, y, pw - 2 * pad, lh * 1.5); y += lh * 1.5 + 4;
+    _actionLabel.frame = CGRectMake(pad, y, pw - 2 * pad, lh * 1.4); y += lh * 1.4 + 6;
     CGFloat bh = [YFUI isPad] ? 52 : 42;
-    y = [YFUI layoutViews:@[_resignButton, _drawButton, _abortButton, _flipButton] x:pad y:y
-                    width:pw - 2 * pad itemHeight:bh columns:2 spacing:8] + 10;
+    NSMutableArray *buttons = [NSMutableArray array];
+    for (YFButton *b in @[_claimButton, _resignButton, _drawButton, _flipButton]) if (!b.hidden) [buttons addObject:b];
+    y = [YFUI layoutViews:buttons x:pad y:y width:pw - 2 * pad itemHeight:bh
+                  columns:(buttons.count == 3 ? 3 : 2) spacing:8] + 10;
     CGFloat mh = pf.size.height - y - pad;
     _movesView.hidden = mh < 30;
     _movesView.frame = CGRectMake(pad, y, pw - 2 * pad, MAX(0, mh));
@@ -701,7 +717,17 @@ static NSString *PlayerName(NSDictionary *p) {
     } else if ([type isEqualToString:@"gameState"]) {
         [self applyState:obj];
     } else if ([type isEqualToString:@"opponentGone"]) {
+        // Lichess meldt dat de tegenstander weg is, en na hoeveel seconden je de winst mag opeisen.
         _opponentGone = [obj[@"gone"] boolValue];
+        if (_opponentGone) {
+            id secs = obj[@"claimWinInSeconds"];
+            double wait = [secs respondsToSelector:@selector(doubleValue)] ? [secs doubleValue] : 0;
+            _claimAt = [NSDate timeIntervalSinceReferenceDate] + MAX(0, wait);
+            _actionLabel.text = @"Je tegenstander is weg. Blijft hij weg, dan kun je straks de winst opeisen.";
+        } else {
+            _claimAt = 0;
+            _actionLabel.text = @"Je tegenstander is terug.";
+        }
         [self updateTexts];
     }
 }
@@ -725,8 +751,13 @@ static NSString *PlayerName(NSDictionary *p) {
     } else {
         [self updateTexts];
     }
-    // Remiseaanbod van de tegenstander.
+    // Remiseaanbiedingen (van jou en van de tegenstander).
     BOOL oppOffers = _myColor == CE_WHITE ? [st[@"bdraw"] boolValue] : [st[@"wdraw"] boolValue];
+    BOOL myOffer = _myColor == CE_WHITE ? [st[@"wdraw"] boolValue] : [st[@"bdraw"] boolValue];
+    if (_myDrawOffer && !myOffer && ![self isOver]) _actionLabel.text = @"Je remiseaanbod is niet aangenomen. Speel verder.";
+    _myDrawOffer = myOffer;
+    _oppDrawOffer = oppOffers;
+    [self updateTexts];
     if (oppOffers && ![self isOver] && _drawAlertedAt != (NSInteger)moves.count) {
         _drawAlertedAt = (NSInteger)moves.count;
         [self askDrawOffer];
@@ -818,8 +849,22 @@ static NSString *PlayerName(NSDictionary *p) {
     NSString *meGlyph = [ChessPiece textGlyphForPiece:CE_PIECE(_myColor, CE_KING)];
     NSString *oppClock = timed ? [NSString stringWithFormat:@"   ⏱ %@", [self formatMs:[self remainingMsFor:opp]]] : @"";
     NSString *meClock = timed ? [NSString stringWithFormat:@"   ⏱ %@", [self formatMs:[self remainingMsFor:_myColor]]] : @"";
-    _topLabel.text = [NSString stringWithFormat:@"%@ %@%@%@", oppGlyph, PlayerName(oppP), oppClock,
-                      _opponentGone ? @"\n(tegenstander is weg)" : @""];
+    // Tegenstander weg: aftellen tot je de winst mag opeisen.
+    BOOL live = ![self isOver];
+    NSString *goneText = @"";
+    BOOL canClaim = NO;
+    if (_opponentGone && live) {
+        double left = _claimAt - [NSDate timeIntervalSinceReferenceDate];
+        if (left > 0.5) goneText = [NSString stringWithFormat:@"\n(tegenstander is weg — winst opeisen over %d s)", (int)ceil(left)];
+        else { goneText = @"\n(tegenstander is weg — je mag de winst opeisen!)"; canClaim = YES; }
+    }
+    BOOL hideClaim = !(_opponentGone && live);
+    if (_claimButton.hidden != hideClaim) {
+        _claimButton.hidden = hideClaim;
+        [self.view setNeedsLayout];
+    }
+    _claimButton.enabled = canClaim;
+    _topLabel.text = [NSString stringWithFormat:@"%@ %@%@%@", oppGlyph, PlayerName(oppP), oppClock, goneText];
     _bottomLabel.text = [NSString stringWithFormat:@"%@ Jij: %@%@", meGlyph, PlayerName(meP), meClock];
     BOOL running = ![self isOver] && _serverMoves.count >= 2;
     _topLabel.textColor = (running && _pos.side == opp) ? s.accentColor : s.textColor;
@@ -857,9 +902,14 @@ static NSString *PlayerName(NSDictionary *p) {
         _statusLabel.text = t;
     }
     BOOL live = _haveFull && ![self isOver];
-    _resignButton.enabled = live && _serverMoves.count >= 2;
-    _drawButton.enabled = live && _serverMoves.count >= 2;
-    _abortButton.enabled = live && _serverMoves.count < 2;
+    BOOL early = _serverMoves.count < 2;   // lichess: zolang niet beide spelers gezet hebben, kan alleen afbreken
+    [_resignButton setTitle:early ? @"✕ Afbreken" : @"⚑ Opgeven" forState:UIControlStateNormal];
+    _resignButton.enabled = live;
+    NSString *drawTitle = _oppDrawOffer ? @"½ Remise accepteren"
+                        : (_myDrawOffer ? @"Remise aangeboden…" : @"½ Remise aanbieden");
+    [_drawButton setTitle:drawTitle forState:UIControlStateNormal];
+    if (_drawButton.primary != _oppDrawOffer) _drawButton.primary = _oppDrawOffer;
+    _drawButton.enabled = live && !early && !_myDrawOffer;
     [self tick];
 }
 
@@ -962,32 +1012,77 @@ static NSString *PlayerName(NSDictionary *p) {
 
 #pragma mark - Knoppen
 
-- (void)postAction:(NSString *)action title:(NSString *)title {
+// Stuurt een actie naar lichess. De uitkomst komt in de regel onder je naam (geen pop-ups over elkaar).
+- (void)postAction:(NSString *)action busy:(NSString *)busy ok:(NSString *)ok fail:(NSString *)fail
+              done:(void (^)(BOOL success))done {
+    SettingsManager *s = [SettingsManager shared];
+    _actionLabel.textColor = s.secondaryTextColor;
+    _actionLabel.text = busy;
     __weak OnlineGameViewController *weakSelf = self;
     [[LichessClient shared] request:@"POST" path:[NSString stringWithFormat:@"/api/board/game/%@/%@", _gameId, action]
                                form:nil completion:^(NSInteger status, id json, NSString *errorText) {
         OnlineGameViewController *me = weakSelf;
-        if (me && errorText) [YFUI showMessage:errorText title:title from:me];
+        if (!me) return;
+        SettingsManager *st = [SettingsManager shared];
+        if (errorText) {
+            me->_actionLabel.textColor = st.errorColor;
+            me->_actionLabel.text = [NSString stringWithFormat:@"%@: %@", fail, errorText];
+        } else if (ok) {
+            me->_actionLabel.textColor = st.okColor;
+            me->_actionLabel.text = ok;
+        }
+        if (done) done(errorText == nil);
+        [me updateTexts];
     }];
 }
 
 - (void)resignTapped {
-    UIAlertController *a = [UIAlertController alertControllerWithTitle:@"Opgeven?" message:@"Je verliest dan deze partij."
+    if ([self isOver]) return;
+    BOOL early = _serverMoves.count < 2;
+    NSString *title = early ? @"Partij afbreken?" : @"Opgeven?";
+    NSString *msg = early ? @"De partij is nog niet echt begonnen. Afbreken telt niet mee voor je rating."
+                          : @"Je verliest dan deze partij.";
+    UIAlertController *a = [UIAlertController alertControllerWithTitle:title message:msg
                                                         preferredStyle:UIAlertControllerStyleAlert];
     [a addAction:[UIAlertAction actionWithTitle:@"Annuleren" style:UIAlertActionStyleCancel handler:nil]];
-    [a addAction:[UIAlertAction actionWithTitle:@"Opgeven" style:UIAlertActionStyleDestructive handler:^(UIAlertAction *act) {
-        [self postAction:@"resign" title:@"Opgeven lukte niet"];
+    [a addAction:[UIAlertAction actionWithTitle:early ? @"Afbreken" : @"Opgeven" style:UIAlertActionStyleDestructive
+                                        handler:^(UIAlertAction *act) {
+        if (early) [self postAction:@"abort" busy:@"Afbreken…" ok:@"De partij is afgebroken." fail:@"Afbreken lukte niet" done:nil];
+        else [self postAction:@"resign" busy:@"Opgeven…" ok:@"Je hebt opgegeven." fail:@"Opgeven lukte niet" done:nil];
     }]];
     [self presentViewController:a animated:YES completion:nil];
 }
 
 - (void)drawTapped {
-    [self postAction:@"draw/yes" title:@"Remise aanbieden lukte niet"];
-    [YFUI showMessage:@"Je remiseaanbod is verstuurd. De tegenstander beslist." title:@"Remise aangeboden" from:self];
+    if ([self isOver]) return;
+    if (_oppDrawOffer) {
+        [self postAction:@"draw/yes" busy:@"Remise accepteren…" ok:@"Remise aangenomen." fail:@"Accepteren lukte niet" done:nil];
+        return;
+    }
+    _myDrawOffer = YES;   // meteen tonen; lichess bevestigt via de verbinding
+    [self updateTexts];
+    __weak OnlineGameViewController *weakSelf = self;
+    [self postAction:@"draw/yes" busy:@"Remise aanbieden…"
+                  ok:@"Remiseaanbod verstuurd. Wachten op je tegenstander…"
+                fail:@"Remise aanbieden lukte niet" done:^(BOOL success) {
+        OnlineGameViewController *me = weakSelf;
+        if (me && !success) { me->_myDrawOffer = NO; [me updateTexts]; }
+    }];
 }
 
-- (void)abortTapped {
-    [self postAction:@"abort" title:@"Afbreken lukte niet"];
+- (void)claimTapped {
+    if ([self isOver] || !_opponentGone) return;
+    UIAlertController *a = [UIAlertController alertControllerWithTitle:@"Tegenstander is weg"
+                                                               message:@"Je tegenstander is al een tijdje weg. Wat wil je doen?"
+                                                        preferredStyle:UIAlertControllerStyleAlert];
+    [a addAction:[UIAlertAction actionWithTitle:@"\U0001F3C6 Winst opeisen" style:UIAlertActionStyleDefault handler:^(UIAlertAction *act) {
+        [self postAction:@"claim-victory" busy:@"Winst opeisen…" ok:@"Winst opgeëist!" fail:@"Winst opeisen lukte niet" done:nil];
+    }]];
+    [a addAction:[UIAlertAction actionWithTitle:@"½ Remise opeisen" style:UIAlertActionStyleDefault handler:^(UIAlertAction *act) {
+        [self postAction:@"claim-draw" busy:@"Remise opeisen…" ok:@"Remise opgeëist." fail:@"Remise opeisen lukte niet" done:nil];
+    }]];
+    [a addAction:[UIAlertAction actionWithTitle:@"Nog even wachten" style:UIAlertActionStyleCancel handler:nil]];
+    [self presentViewController:a animated:YES completion:nil];
 }
 
 - (void)askDrawOffer {
@@ -995,10 +1090,10 @@ static NSString *PlayerName(NSDictionary *p) {
                                                                message:@"Je tegenstander biedt remise aan (gelijkspel)."
                                                         preferredStyle:UIAlertControllerStyleAlert];
     [a addAction:[UIAlertAction actionWithTitle:@"Weigeren" style:UIAlertActionStyleCancel handler:^(UIAlertAction *act) {
-        [self postAction:@"draw/no" title:@"Weigeren lukte niet"];
+        [self postAction:@"draw/no" busy:@"Weigeren…" ok:@"Remise geweigerd. Speel verder." fail:@"Weigeren lukte niet" done:nil];
     }]];
     [a addAction:[UIAlertAction actionWithTitle:@"Accepteren" style:UIAlertActionStyleDefault handler:^(UIAlertAction *act) {
-        [self postAction:@"draw/yes" title:@"Accepteren lukte niet"];
+        [self postAction:@"draw/yes" busy:@"Remise accepteren…" ok:@"Remise aangenomen." fail:@"Accepteren lukte niet" done:nil];
     }]];
     [self presentViewController:a animated:YES completion:nil];
 }

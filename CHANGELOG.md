@@ -3,6 +3,11 @@
 Elke versie hieronder wordt automatisch als release op GitHub gezet (met de `.ipa` en `.deb`).
 Het versienummer komt uit het bestand `control`.
 
+## 1.7.0
+- Online: knop "Winst opeisen" als je tegenstander weg is. De app telt af tot lichess het toestaat en daarna kun je de winst (of remise) opeisen.
+- Online: opgeven en remise verbeterd. In het begin heet de knop "Afbreken" (lichess staat dan nog geen opgeven toe), je ziet of jouw remiseaanbod nog loopt, en een aanbod van je tegenstander kun je met één knop accepteren.
+- Online: uitkomst van je actie (gelukt of foutmelding) staat nu onder je naam, in plaats van pop-ups die elkaar konden blokkeren.
+
 ## 1.6.0
 - Puzzels openen nu met drie grote vakjes: Mat in 1, Mat in 2 en Eindspel. Tik een vakje aan voor de lijst.
 - Eindspel is nu: weinig stukken op het bord en jij moet winnen (mat zetten) tegen de bot. De oude "vind de juiste zet"-oefeningen zijn weg.
