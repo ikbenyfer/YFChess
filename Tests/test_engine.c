@@ -8,6 +8,7 @@
 #include "ChessEngine.h"
 #include "ChessBot.h"
 #include "ChessPuzzles.h"
+#include "ChessEndgame.h"
 
 static int g_fail = 0, g_pass = 0;
 
@@ -394,6 +395,103 @@ static void test_parse_san(void) {
     CHECK(!ce_parse_san(&p, "", &m), "lege zet wordt geweigerd");
 }
 
+static void test_endgames(void) {
+    printf("[eindspelen]\n");
+    static const struct { const char *fen; int win; } KPK_CASES[] = {
+    { "8/2P5/1K6/8/8/3k4/8/8 w - - 0 1", 1 },
+    { "8/6P1/8/8/6K1/8/3k4/8 w - - 0 1", 1 },
+    { "8/2P5/8/8/4K3/8/8/7k w - - 0 1", 1 },
+    { "8/8/8/5p2/8/1k6/8/5K2 w - - 0 1", 0 },
+    { "8/8/8/7k/8/7P/7K/8 w - - 0 1", 0 },
+    { "8/8/7K/8/8/8/P3k3/8 w - - 0 1", 1 },
+    { "1K6/8/8/4k3/8/8/1P6/8 b - - 0 1", 0 },
+    { "8/8/3k4/8/8/3p1K2/8/8 b - - 0 1", 0 },
+    { "8/8/p7/8/8/8/1k6/5K2 b - - 0 1", 1 },
+    { "2k4K/8/8/8/8/8/P7/8 b - - 0 1", 0 },
+    { "1K6/1p6/8/4k3/8/8/8/8 w - - 0 1", 0 },
+    { "3K4/8/5k2/8/8/5P2/8/8 b - - 0 1", 0 },
+    { "8/8/8/4P3/3k4/8/8/7K w - - 0 1", 1 },
+    { "7k/2K5/8/8/8/8/2P5/8 b - - 0 1", 1 },
+    { "8/3K4/8/3k4/8/1p6/8/8 b - - 0 1", 1 },
+    { "8/8/8/8/8/3P2k1/2K5/8 w - - 0 1", 1 },
+    { "6k1/8/8/8/8/7p/8/1K6 b - - 0 1", 1 },
+    { "8/5p2/8/8/8/2k5/8/K7 b - - 0 1", 1 },
+    { "8/8/8/8/k7/8/P7/7K b - - 0 1", 0 },
+    { "8/8/3P4/8/8/4K3/6k1/8 w - - 0 1", 1 },
+    { "8/8/8/8/8/3k4/4p3/K7 w - - 0 1", 1 },
+    { "8/P7/8/8/2k5/8/1K6/8 b - - 0 1", 1 },
+    { "5K2/8/8/7k/8/8/2P5/8 w - - 0 1", 1 },
+    { "8/8/6P1/8/2k5/8/8/2K5 w - - 0 1", 1 },
+    { "8/8/8/1p4K1/8/8/3k4/8 w - - 0 1", 1 },
+    { "8/8/2P2K2/8/4k3/8/8/8 w - - 0 1", 1 },
+    { "8/3k4/8/8/5PK1/8/8/8 b - - 0 1", 1 },
+    { "8/8/5K2/3p4/8/8/8/3k4 b - - 0 1", 1 },
+    { "8/8/6K1/8/4P3/8/2k5/8 w - - 0 1", 1 },
+    { "4K3/8/3P4/8/1k6/8/8/8 b - - 0 1", 1 },
+    { "5k2/8/4P3/8/8/8/8/K7 w - - 0 1", 0 },
+    { "8/7K/2k5/8/8/8/3p4/8 b - - 0 1", 1 },
+    { "8/3K4/8/8/8/4P3/2k5/8 w - - 0 1", 1 },
+    { "4K3/8/4k3/8/8/3P4/8/8 w - - 0 1", 0 },
+    { "8/8/8/8/8/1p6/5k2/1K6 w - - 0 1", 0 },
+    { "8/8/8/P7/3K4/8/8/3k4 b - - 0 1", 1 },
+    { "8/8/1k6/1p6/6K1/8/8/8 w - - 0 1", 1 },
+    { "8/8/8/8/8/3P3K/8/k7 w - - 0 1", 1 },
+    { "1K6/8/8/8/8/8/p7/3k4 b - - 0 1", 1 },
+    { "8/8/8/1k6/1p5K/8/8/8 w - - 0 1", 1 },
+    { "8/2p2K2/8/8/8/8/7k/8 b - - 0 1", 1 },
+    { "8/6P1/8/8/6k1/8/1K6/8 w - - 0 1", 1 },
+    { "8/8/8/6K1/8/3p4/7k/8 w - - 0 1", 1 },
+    { "8/5K2/5p2/8/1k6/8/8/8 w - - 0 1", 0 },
+    { "8/8/3p2K1/8/8/8/8/2k5 b - - 0 1", 0 },
+    { "8/1k6/2p5/8/8/8/8/2K5 w - - 0 1", 0 },
+    { "8/8/8/8/5k2/8/5PK1/8 b - - 0 1", 0 },
+    { "8/8/8/2K5/8/7p/8/5k2 w - - 0 1", 1 },
+    { "8/3P2K1/8/1k6/8/8/8/8 b - - 0 1", 1 },
+    { "8/8/1K6/3P4/8/8/3k4/8 w - - 0 1", 1 },
+    { "8/6K1/8/2P5/8/8/1k6/8 w - - 0 1", 1 },
+    { "8/8/8/1K6/4P3/8/2k5/8 b - - 0 1", 1 },
+    { "8/5K2/8/2k5/8/P7/8/8 w - - 0 1", 0 },
+    { "8/8/8/1P6/8/4k3/6K1/8 w - - 0 1", 1 },
+    { "8/8/8/7k/1Kp5/8/8/8 b - - 0 1", 0 },
+    { "8/8/4P3/2k5/8/6K1/8/8 b - - 0 1", 0 },
+    { "8/8/3k4/8/1P3K2/8/8/8 b - - 0 1", 0 },
+    { "8/8/4K3/8/8/P7/8/6k1 w - - 0 1", 1 },
+    { "8/7k/8/K7/8/4P3/8/8 w - - 0 1", 1 },
+    { "8/K7/8/4k3/7p/8/8/8 w - - 0 1", 1 },
+    };
+    int n = (int)(sizeof(KPK_CASES) / sizeof(KPK_CASES[0]));
+    int right = 0;
+    for (int i = 0; i < n; i++) {
+        CEPosition p;
+        load(&p, KPK_CASES[i].fen);
+        int r = ce_kpk_result(&p);
+        if (r == KPK_CASES[i].win) right++;
+        else printf("  KPK fout bij %s: verwacht %d, kreeg %d\n", KPK_CASES[i].fen, KPK_CASES[i].win, r);
+    }
+    CHECK(right == n, "pion-tabel klopt met de tablebase (%d van %d)", right, n);
+    CEPosition p;
+    load(&p, "4k3/8/8/8/8/8/8/R3K3 w - - 0 1");
+    CHECK(ce_kpk_result(&p) == -1, "geen K+P tegen K herkend");
+    // De maker: elke soort, veel keer.
+    const char *names[] = { "gemengd", "dame", "toren", "pion", "twee torens", "lopers", "dame tegen stuk" };
+    for (int kind = 0; kind < EG_KIND_COUNT; kind++) {
+        uint32_t seed = 12345u + (uint32_t)kind * 977u;
+        int good = 0, total = 25;
+        for (int i = 0; i < total; i++) {
+            CEPosition q;
+            int limit = 0;
+            const char *title = NULL, *hint = NULL;
+            if (!ce_generate_endgame(kind, &seed, &q, &limit, &title, &hint)) continue;
+            char err[200];
+            int ok = ce_validate(&q, err, sizeof err) && ce_status(&q, NULL, 0) == CE_ONGOING &&
+                     limit >= 10 && title && hint && !ce_in_check(&q, q.side);
+            if (ok && ce_kpk_result(&q) >= 0) ok = ce_kpk_result(&q) == 1;
+            if (ok) good++;
+        }
+        CHECK(good == total, "eindspel-maker %s: %d van %d goed", names[kind], good, total);
+    }
+}
+
 static void test_bot(void) {
     printf("[bot]\n");
     CEPosition p;
@@ -536,7 +634,7 @@ static void test_puzzles(void) {
             CHECK(pz->n >= 10, "eindspel %d: genoeg zetten", i);
         }
     }
-    CHECK(mates == mate1 + mate2 && mate1 >= 40 && mate2 >= 24 && endgames >= 4 && lineCount >= 50,
+    CHECK(mates == mate1 + mate2 && mate1 >= 40 && mate2 >= 24 && endgames >= 50 && lineCount == 0,
           "genoeg puzzels (%d mat in 1, %d mat in 2, %d eindspel tegen bot, %d eindspel-reeksen)", mate1, mate2, endgames, lineCount);
     printf("  %d mat in 1, %d mat in 2, %d eindspel tegen bot, %d eindspel-reeksen\n", mate1, mate2, endgames, lineCount);
     // Een foute zet wordt herkend.
@@ -617,6 +715,7 @@ int main(void) {
     test_parse_san();
     test_move_rating();
     test_puzzles();
+    test_endgames();
     test_adaptive_bot();
     printf("\nGeslaagd: %d, mislukt: %d\n", g_pass, g_fail);
     if (g_fail) {
