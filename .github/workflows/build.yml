@@ -37,6 +37,8 @@ jobs:
     name: App bouwen (iOS 9, armv7)
     needs: tests
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     env:
       THEOS: ${{ github.workspace }}/theos
       SDK_NAME: iPhoneOS14.5
@@ -143,3 +145,28 @@ jobs:
           path: |
             project/packages/*.ipa
             project/packages/*.deb
+
+      - name: Release op GitHub zetten (bij Releases)
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        working-directory: project
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          VERSION=$(grep '^Version:' control | awk '{print $2}')
+          TAG="v$VERSION"
+          # Uitleg voor deze versie uit CHANGELOG.md halen.
+          awk -v v="## $VERSION" '$0==v{f=1;next} /^## /{f=0} f' CHANGELOG.md > notes.md
+          [ -s notes.md ] || echo "YF Schaak versie $VERSION" > notes.md
+          echo "" >> notes.md
+          echo "**Installeren op de iPad:** download \`YFChess-$VERSION.ipa\` en installeer met iOSApp Proxy Install of Filza (AppSync Unified nodig). De \`.deb\` kan ook via Filza." >> notes.md
+          cp packages/YFChess.ipa "packages/YFChess-$VERSION.ipa"
+          DEB=$(ls packages/*.deb | head -1)
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG bestaat al: bestanden en tekst bijwerken."
+            gh release upload "$TAG" "packages/YFChess-$VERSION.ipa" "$DEB" --clobber
+            gh release edit "$TAG" --title "YF Schaak $VERSION" --notes-file notes.md
+          else
+            gh release create "$TAG" "packages/YFChess-$VERSION.ipa" "$DEB" --title "YF Schaak $VERSION" --notes-file notes.md --target "$GITHUB_SHA" --latest
+          fi
+          gh release view "$TAG"
