@@ -11,7 +11,7 @@
 extern "C" {
 #endif
 
-#define CB_MIN_LEVEL 1
+#define CB_MIN_LEVEL 0   // 0 = super makkelijk
 #define CB_MAX_LEVEL 5
 
 // Kiest een zet voor de kant die aan zet is.

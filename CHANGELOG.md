@@ -3,6 +3,9 @@
 Elke versie hieronder wordt automatisch als release op GitHub gezet (met de `.ipa` en `.deb`).
 Het versienummer komt uit het bestand `control`.
 
+## 1.8.0
+- Nieuw botniveau 0 "super makkelijk": doet meestal zomaar een zet en geeft vaak stukken weg. Te kiezen bij Spelen tegen bot en bij Instellingen.
+
 ## 1.7.0
 - Online: knop "Winst opeisen" als je tegenstander weg is. De app telt af tot lichess het toestaat en daarna kun je de winst (of remise) opeisen.
 - Online: opgeven en remise verbeterd. In het begin heet de knop "Afbreken" (lichess staat dan nog geen opgeven toe), je ziet of jouw remiseaanbod nog loopt, en een aanbod van je tegenstander kun je met één knop accepteren.

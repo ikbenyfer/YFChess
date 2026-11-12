@@ -213,8 +213,8 @@
     _levelLabel = [YFUI labelWithSize:fs bold:YES];
     _levelLabel.text = @"Of kies zelf een vast niveau:";
     [_scroll addSubview:_levelLabel];
-    _levelControl = [[UISegmentedControl alloc] initWithItems:@[@"1", @"2", @"3", @"4", @"5"]];
-    _levelControl.selectedSegmentIndex = s.botLevel - 1;
+    _levelControl = [[UISegmentedControl alloc] initWithItems:@[@"0", @"1", @"2", @"3", @"4", @"5"]];
+    _levelControl.selectedSegmentIndex = s.botLevel;
     [_levelControl addTarget:self action:@selector(changed) forControlEvents:UIControlEventValueChanged];
     [_scroll addSubview:_levelControl];
     _levelInfo = [YFUI labelWithSize:fs - 2 bold:NO];
@@ -252,7 +252,7 @@
     _levelInfo.textColor = s.secondaryTextColor;
     _colorControl.tintColor = s.accentColor;
     _levelControl.tintColor = s.accentColor;
-    _levelControl.selectedSegmentIndex = s.botLevel - 1;
+    _levelControl.selectedSegmentIndex = s.botLevel;
     for (YFButton *b in @[_startButton, _savedButton, _customButton]) [b applyTheme];
     [self changed];
 }
@@ -324,14 +324,15 @@
 - (void)changed {
     SettingsManager *s = [SettingsManager shared];
     s.botColor = _colorControl.selectedSegmentIndex;
-    s.botLevel = _levelControl.selectedSegmentIndex + 1;
+    s.botLevel = _levelControl.selectedSegmentIndex;
     [s save];
-    NSArray *info = @[ @"1 — Beginner: kijkt maar één zet vooruit en maakt bewust foutjes.",
+    NSArray *info = @[ @"0 — Super makkelijk: doet meestal zomaar een zet en geeft vaak stukken weg. Goed om mee te beginnen!",
+                       @"1 — Beginner: kijkt maar één zet vooruit en maakt bewust foutjes.",
                        @"2 — Makkelijk: kijkt twee zetten vooruit, af en toe een foutje.",
                        @"3 — Gemiddeld: kijkt drie zetten vooruit.",
                        @"4 — Sterk: kijkt vier zetten vooruit.",
                        @"5 — Sterkst: denkt tot ongeveer 7 seconden na." ];
-    _levelInfo.text = info[s.botLevel - 1];
+    _levelInfo.text = info[MAX(0, MIN(5, s.botLevel))];
 }
 
 - (void)ratingChanged {

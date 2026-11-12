@@ -52,7 +52,7 @@ static UIColor *RGB(unsigned int hex) {
         _autoFlip = [d boolForKey:@"autoFlip"];
         _hideLastMove = [d boolForKey:@"hideLastMove"];
         _botLevel = [d integerForKey:@"botLevel"];
-        if (_botLevel < 1 || _botLevel > 5) _botLevel = 2;
+        if (_botLevel < 0 || _botLevel > 5) _botLevel = 2;
         _botColor = [d integerForKey:@"botColor"];
         if (_botColor < 0 || _botColor > 2) _botColor = 0;
         _clockBaseSeconds = [d integerForKey:@"clockBase"];

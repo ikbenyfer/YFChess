@@ -57,7 +57,7 @@ enum { SecDisplay = 0, SecLook, SecBot, SecPositions, SecCount };
     if (section == SecLook)
         return @"Klassiek = de oude schaaktekens. Modern: stukken van Colin M.L. Burnett (GPLv2+). "
                @"3D: “Staunty” van sadsnake1 (CC BY-NC-SA 4.0). Beide sets komen van lichess.org en zitten in de app (geen internet nodig).";
-    if (section == SecBot) return @"1 = beginner, 5 = sterkst. Je kunt dit ook kiezen bij Spelen tegen bot.";
+    if (section == SecBot) return @"0 = super makkelijk, 1 = beginner, 5 = sterkst. Je kunt dit ook kiezen bij Spelen tegen bot.";
     if (section == SecPositions) return @"Alles wordt alleen op dit apparaat bewaard. Internet is alleen nodig voor Online spelen (lichess).";
     return nil;
 }
@@ -74,7 +74,7 @@ enum { SecDisplay = 0, SecLook, SecBot, SecPositions, SecCount };
 
 - (UISegmentedControl *)segmentWithItems:(NSArray *)items selected:(NSInteger)sel action:(SEL)action {
     UISegmentedControl *seg = [[UISegmentedControl alloc] initWithItems:items];
-    CGFloat w = [YFUI isPad] ? 70 * items.count : 54 * items.count;
+    CGFloat w = [YFUI isPad] ? 70 * items.count : 44 * items.count;
     seg.frame = CGRectMake(0, 0, w, 32);
     seg.selectedSegmentIndex = sel;
     seg.tintColor = [SettingsManager shared].accentColor;
@@ -138,7 +138,7 @@ enum { SecDisplay = 0, SecLook, SecBot, SecPositions, SecCount };
         }
     } else if (indexPath.section == SecBot) {
         cell.textLabel.text = @"Niveau";
-        cell.accessoryView = [self segmentWithItems:@[@"1", @"2", @"3", @"4", @"5"] selected:s.botLevel - 1
+        cell.accessoryView = [self segmentWithItems:@[@"0", @"1", @"2", @"3", @"4", @"5"] selected:s.botLevel
                                              action:@selector(levelChanged:)];
     } else {
         cell.textLabel.text = [NSString stringWithFormat:@"Opgeslagen posities (%lu)", (unsigned long)s.savedPositions.count];
@@ -197,7 +197,7 @@ enum { SecDisplay = 0, SecLook, SecBot, SecPositions, SecCount };
 
 - (void)levelChanged:(UISegmentedControl *)seg {
     SettingsManager *s = [SettingsManager shared];
-    s.botLevel = seg.selectedSegmentIndex + 1;
+    s.botLevel = seg.selectedSegmentIndex;
     [s save];
 }
 

@@ -514,7 +514,7 @@ static void test_bot(void) {
     CHECK(score > 90000, "bot ziet mat met twee dames (score %d)", score);
     // Elk niveau geeft een legale zet vanaf de beginstelling.
     ce_start(&p);
-    for (int lvl = 1; lvl <= 4; lvl++) {
+    for (int lvl = 0; lvl <= 4; lvl++) {
         CHECK(cb_choose_move(&p, &p.hash, 1, lvl, &m, NULL), "niveau %d geeft een zet", lvl);
         CEMove chk;
         CHECK(ce_find_move(&p, m.from, m.to, m.promo, &chk), "niveau %d: zet is legaal", lvl);

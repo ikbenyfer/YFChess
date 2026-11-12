@@ -378,6 +378,8 @@ int cb_choose_move(const CEPosition *pos, const uint64_t *history, int count,
     int depth, timeMs, noise;
     if (level < CB_MIN_LEVEL) level = CB_MIN_LEVEL;
     if (level > CB_MAX_LEVEL) level = CB_MAX_LEVEL;
+    // Niveau 0: super makkelijk. Meestal een willekeurige zet, soms zelfs bewust een slechte.
+    if (level == 0) return cb_choose_move_strength(pos, history, count, 5, out, cancel);
     switch (level) {
         case 1: depth = 1; timeMs = 1500; noise = 300; break;
         case 2: depth = 2; timeMs = 2500; noise = 80; break;
