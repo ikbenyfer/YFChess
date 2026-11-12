@@ -1,0 +1,34 @@
+name: Bouw YF Schaak
+
+# Start bij elke wijziging, of met de hand via het tabblad "Actions".
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  tests:
+    name: Engine-tests (Linux)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Code ophalen
+        uses: actions/checkout@v4
+
+      - name: Engine compileren met strenge waarschuwingen
+        run: |
+          gcc --version | head -1
+          gcc -std=c99 -O2 -Wall -Wextra -Werror -IEngine \
+            Engine/ChessEngine.c Engine/ChessBot.c Tests/test_engine.c -o test_engine
+          clang -std=c99 -O2 -Wall -Wextra -Werror -IEngine \
+            Engine/ChessEngine.c Engine/ChessBot.c Tests/test_engine.c -o test_engine_clang
+
+      - name: Tests draaien
+        run: ./test_engine
+
+      - name: Tests draaien met clang
+        run: ./test_engine_clang
+
+      - name: Tests met geheugencontrole (AddressSanitizer + UBSan)
+        run: |
+          gcc -std=c99 -O1 -g -fsanitize=address,undefined -fno-sanitize-recover=all -IEngine \
+            Engine/ChessEngine.c Engine/ChessBot.c Tests/test_engine.c -o test_engine_asan
+          ./test_engine_asan
