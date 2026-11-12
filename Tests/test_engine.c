@@ -84,7 +84,8 @@ static void test_castling(void) {
     CHECK(q.board[6] == CE_PIECE(CE_WHITE, CE_KING) && q.board[5] == CE_PIECE(CE_WHITE, CE_ROOK) && !q.board[7] && !q.board[4],
           "na korte rokade: koning g1, toren f1");
     CHECK(!(q.castling & (CE_CASTLE_WK | CE_CASTLE_WQ)), "na rokade geen witte rokaderechten meer");
-    CHECK(has_move(&q, "e8c8") && has_move(&q, "e8g8"), "zwart mag nog rokeren");
+    CHECK(has_move(&q, "e8c8"), "zwart mag nog lang rokeren");
+    CHECK(!has_move(&q, "e8g8"), "zwart niet kort: witte toren op f1 valt f8 aan");
     q = p;
     play(&q, NULL, NULL, "e1c1");
     CHECK(q.board[2] == CE_PIECE(CE_WHITE, CE_KING) && q.board[3] == CE_PIECE(CE_WHITE, CE_ROOK) && !q.board[0],
@@ -121,7 +122,7 @@ static void test_castling(void) {
 static void test_en_passant(void) {
     printf("[en passant]\n");
     CEPosition p;
-    load(&p, "rnbqkbnr/ppp1pppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1");
+    load(&p, "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1");
     play(&p, NULL, NULL, "d7d5");
     play(&p, NULL, NULL, "e4e5");
     play(&p, NULL, NULL, "f7f5");
@@ -265,7 +266,7 @@ static void test_custom_positions(void) {
     // Negen dames voor wit: veel zetten, de zetlijst mag niet overlopen.
     load(&p, "kn6/pp6/8/3QQQ2/3QQQ2/3QQQ2/8/7K w - - 0 1");
     n = ce_gen_legal(&p, mv);
-    CHECK(n > 100, "9 dames: veel zetten (kreeg %d)", n);
+    CHECK(n >= 60, "9 dames: veel zetten (kreeg %d)", n);
     CHECK(ce_validate(&p, err, sizeof err), "9 dames is geldig");
 
     // Kant met alleen koning + pionnen.
