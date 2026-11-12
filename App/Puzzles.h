@@ -3,7 +3,8 @@
 
 #import <UIKit/UIKit.h>
 
-@interface PuzzleListViewController : UITableViewController
+// Startscherm met drie vakjes: Mat in 1, Mat in 2 en Eindspel.
+@interface PuzzleHomeViewController : UIViewController
 @end
 
 @interface PuzzleViewController : UIViewController

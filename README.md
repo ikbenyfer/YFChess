@@ -32,8 +32,9 @@ Mat in 1, mat in 2 en eindspel-oefeningen (zet mat tegen de bot binnen een aanta
 wordt in de tests gecontroleerd met een eigen matzoeker. Elke zet die (geforceerd) mat geeft telt als goed,
 niet alleen één vaste oplossing. Bij mat in 2 verdedigt de tegenstander zo lang mogelijk.
 
-Aantallen: 43 mat in 1, 24 mat in 2, 50 eindspel-reeksen ("vind de juiste zetten") en 4 eindspelen
-tegen de bot. 95 puzzels komen uit de [lichess-puzzeldatabase](https://database.lichess.org/#puzzles)
+Aantallen: 43 mat in 1, 24 mat in 2 en 50 eindspelen met weinig stukken waarin je tegen de bot
+moet winnen (gecontroleerd met de lichess-tablebase; extra eindspelen maakt de app zelf, met een
+exacte tabel voor koning + pion tegen koning in `Engine/ChessEndgame.c`). 95 puzzels komen uit de [lichess-puzzeldatabase](https://database.lichess.org/#puzzles)
 (CC0, vrij te gebruiken): populaire puzzels met een rating tot ongeveer 1700, van makkelijk naar moeilijk.
 
 ### Puzzels downloaden

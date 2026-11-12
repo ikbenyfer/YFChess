@@ -10,8 +10,9 @@
 #include "ChessEngine.h"
 #include "ChessBot.h"
 #include "ChessPuzzles.h"
+#include "ChessEndgame.h"
 
-static const NSInteger kGroupCount = 5;   // 0 mat in 1, 1 mat in 2, 2 eindspel-reeks, 3 eindspel tegen bot, 4 gedownload
+// Soorten: 0 = mat in 1, 1 = mat in 2, 2 = eindspel (winnen tegen de bot).
 static const NSUInteger kMaxDownloaded = 2000;
 
 #pragma mark - Puzzelgegevens
@@ -35,10 +36,9 @@ static const NSUInteger kMaxDownloaded = 2000;
 @implementation PuzzleItem
 
 - (NSInteger)group {
-    if (self.downloaded) return 4;
     if (self.type == CP_MATE) return self.n == 1 ? 0 : 1;
-    if (self.type == CP_LINE) return 2;
-    return 3;
+    if (self.type == CP_ENDGAME) return 2;
+    return -1;   // oude soort (zettenreeks): wordt niet meer getoond
 }
 
 - (NSDictionary *)dictionary {
@@ -79,6 +79,7 @@ static NSArray *BuiltinItems(void) {
         NSMutableArray *a = [NSMutableArray array];
         for (int i = 0; i < cp_count(); i++) {
             const CPPuzzle *c = cp_get(i);
+            if (c->type == CP_LINE) continue;
             PuzzleItem *p = [[PuzzleItem alloc] init];
             p.type = c->type;
             p.n = c->n;
@@ -102,6 +103,7 @@ static NSArray *BuiltinItems(void) {
 + (NSUInteger)addItems:(NSArray *)items;   // geeft het aantal nieuwe terug
 + (void)removeItemWithFEN:(NSString *)fen;
 + (void)removeAll;
++ (void)removeGroup:(NSInteger)group;
 @end
 
 @implementation PuzzleStore
@@ -121,7 +123,7 @@ static NSMutableArray *gDownloaded = nil;
     if (![arr isKindOfClass:[NSArray class]]) return;
     for (NSDictionary *d in arr) {
         PuzzleItem *p = [PuzzleItem itemWithDictionary:d];
-        if (p) [gDownloaded addObject:p];
+        if (p && p.group >= 0) [gDownloaded addObject:p];
     }
 }
 
@@ -172,18 +174,21 @@ static NSMutableArray *gDownloaded = nil;
     [self save];
 }
 
-@end
-
-static NSArray *ItemsInGroup(NSInteger group) {
-    NSArray *src = group == 4 ? [PuzzleStore downloadedItems] : BuiltinItems();
-    NSMutableArray *a = [NSMutableArray array];
-    for (PuzzleItem *p in src) if (p.group == group) [a addObject:p];
-    return a;
++ (void)removeGroup:(NSInteger)group {
+    [self loadIfNeeded];
+    NSMutableArray *keep = [NSMutableArray array];
+    for (PuzzleItem *p in gDownloaded) if (p.group != group) [keep addObject:p];
+    gDownloaded = keep;
+    [self save];
 }
 
-static NSArray *AllItemsInOrder(void) {
+@end
+
+// Ingebouwde puzzels van deze soort, met de gedownloade/gemaakte erachter.
+static NSArray *ItemsInGroup(NSInteger group) {
     NSMutableArray *a = [NSMutableArray array];
-    for (NSInteger g = 0; g < kGroupCount; g++) [a addObjectsFromArray:ItemsInGroup(g)];
+    for (PuzzleItem *p in BuiltinItems()) if (p.group == group) [a addObject:p];
+    for (PuzzleItem *p in [PuzzleStore downloadedItems]) if (p.group == group) [a addObject:p];
     return a;
 }
 
@@ -204,9 +209,7 @@ static NSString *GroupName(NSInteger g) {
     switch (g) {
         case 0: return @"Mat in 1";
         case 1: return @"Mat in 2";
-        case 2: return @"Eindspel: vind de juiste zetten";
-        case 3: return @"Eindspel: zet mat tegen de bot";
-        default: return @"Gedownload van lichess";
+        default: return @"Eindspel";
     }
 }
 
@@ -286,20 +289,21 @@ static PuzzleItem *ItemFromLichess(NSDictionary *entry) {
     int mine = (int)(solution.count + 1) / 2;
     if ([themes containsObject:@"mateIn1"] && mine == 1) { item.type = CP_MATE; item.n = 1; }
     else if ([themes containsObject:@"mateIn2"] && mine == 2) { item.type = CP_MATE; item.n = 2; }
-    else { item.type = CP_LINE; item.n = mine; }
+    else return nil;   // alleen mat-puzzels
     return item;
 }
 
-#pragma mark - Downloaden
+#pragma mark - Downloaden / nieuwe eindspelen maken
 
 @interface PuzzleDownloadViewController : UIViewController
+@property (nonatomic) NSInteger category;   // 0 mat in 1, 1 mat in 2, 2 eindspel
 @end
 
 @implementation PuzzleDownloadViewController {
     UIScrollView *_scroll;
     UILabel *_info;
     UILabel *_kindLabel, *_levelLabel, *_countLabel;
-    UISegmentedControl *_kind, *_level, *_count;
+    UISegmentedControl *_kind, *_level, *_egKind, *_count;
     YFButton *_downloadButton;
     YFButton *_deleteButton;
     UILabel *_status;
@@ -309,34 +313,36 @@ static PuzzleItem *ItemFromLichess(NSDictionary *entry) {
 
 - (void)viewDidLoad {
     [super viewDidLoad];
-    self.title = @"Puzzels downloaden";
+    self.title = @"Meer puzzels";
     CGFloat fs = [YFUI isPad] ? 18 : 15;
     _scroll = [[UIScrollView alloc] init];
     _scroll.alwaysBounceVertical = YES;
     [self.view addSubview:_scroll];
     _info = [YFUI labelWithSize:fs bold:NO];
     _kindLabel = [YFUI labelWithSize:fs bold:YES];
-    _kindLabel.text = @"Soort puzzels:";
-    _kind = [[UISegmentedControl alloc] initWithItems:@[@"Gemengd", @"Mat in 1", @"Mat in 2", @"Eindspel"]];
-    _kind.selectedSegmentIndex = 0;
+    _kindLabel.text = @"Soort:";
+    _kind = [[UISegmentedControl alloc] initWithItems:@[@"Mat in 1", @"Mat in 2", @"Eindspel"]];
+    _kind.selectedSegmentIndex = MAX(0, MIN(2, self.category));
+    [_kind addTarget:self action:@selector(kindChanged) forControlEvents:UIControlEventValueChanged];
     _levelLabel = [YFUI labelWithSize:fs bold:YES];
-    _levelLabel.text = @"Moeilijkheid:";
     _level = [[UISegmentedControl alloc] initWithItems:@[@"Heel makkelijk", @"Makkelijk", @"Normaal", @"Moeilijk"]];
     _level.selectedSegmentIndex = 1;
+    _egKind = [[UISegmentedControl alloc] initWithItems:@[@"Gemengd", @"Dame", @"Toren", @"Pion", @"2 torens", @"Lopers", @"D-stuk"]];
+    _egKind.selectedSegmentIndex = 0;
     _countLabel = [YFUI labelWithSize:fs bold:YES];
-    _countLabel.text = @"Hoeveel puzzels?";
+    _countLabel.text = @"Hoeveel?";
     _count = [[UISegmentedControl alloc] initWithItems:@[@"10", @"25", @"50"]];
-    _count.selectedSegmentIndex = 1;
-    _downloadButton = [YFUI buttonWithTitle:@"⬇ Gratis downloaden" target:self action:@selector(downloadTapped)];
+    _count.selectedSegmentIndex = 0;
+    _downloadButton = [YFUI buttonWithTitle:@"" target:self action:@selector(downloadTapped)];
     _downloadButton.primary = YES;
-    _deleteButton = [YFUI buttonWithTitle:@"Alle gedownloade puzzels verwijderen" target:self action:@selector(deleteTapped)];
+    _deleteButton = [YFUI buttonWithTitle:@"Alle extra puzzels van deze soort verwijderen" target:self action:@selector(deleteTapped)];
     _status = [YFUI labelWithSize:fs bold:YES];
     _status.textAlignment = NSTextAlignmentCenter;
     _spinner = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleGray];
     _spinner.hidesWhenStopped = YES;
-    for (UIView *v in @[_info, _kindLabel, _kind, _levelLabel, _level, _countLabel, _count, _downloadButton, _spinner, _status, _deleteButton])
+    for (UIView *v in @[_info, _kindLabel, _kind, _levelLabel, _level, _egKind, _countLabel, _count, _downloadButton, _spinner, _status, _deleteButton])
         [_scroll addSubview:v];
-    [self updateInfo];
+    [self kindChanged];
 }
 
 - (void)viewWillAppear:(BOOL)animated {
@@ -345,18 +351,47 @@ static PuzzleItem *ItemFromLichess(NSDictionary *entry) {
     [YFUI applyThemeToController:self];
     SettingsManager *s = [SettingsManager shared];
     for (UILabel *l in @[_info, _kindLabel, _levelLabel, _countLabel, _status]) l.textColor = s.textColor;
-    for (UISegmentedControl *c in @[_kind, _level, _count]) c.tintColor = s.accentColor;
+    for (UISegmentedControl *c in @[_kind, _level, _egKind, _count]) c.tintColor = s.accentColor;
     [_downloadButton applyTheme];
     [_deleteButton applyTheme];
     _spinner.color = s.accentColor;
 }
 
+- (BOOL)isEndgame {
+    return _kind.selectedSegmentIndex == 2;
+}
+
+- (NSUInteger)extraCount {
+    NSUInteger n = 0;
+    for (PuzzleItem *p in [PuzzleStore downloadedItems]) if (p.group == _kind.selectedSegmentIndex) n++;
+    return n;
+}
+
+- (void)kindChanged {
+    BOOL eg = [self isEndgame];
+    _level.hidden = eg;
+    _egKind.hidden = !eg;
+    _levelLabel.text = eg ? @"Welke stukken?" : @"Moeilijkheid:";
+    [_downloadButton setTitle:eg ? @"➕ Nieuwe eindspelen maken" : @"⬇ Gratis downloaden van lichess"
+                     forState:UIControlStateNormal];
+    _status.text = @"";
+    [self updateInfo];
+}
+
 - (void)updateInfo {
-    NSUInteger n = [PuzzleStore downloadedItems].count;
-    _info.text = [NSString stringWithFormat:
-        @"Haal gratis extra puzzels op van lichess.org (je hebt wifi nodig, maar geen account). "
-        @"Ze worden op deze iPad bewaard, dus daarna kun je ze ook zonder internet spelen.\n\n"
-        @"Je hebt nu %lu gedownloade puzzels (maximaal %lu).", (unsigned long)n, (unsigned long)kMaxDownloaded];
+    NSUInteger n = [self extraCount];
+    if ([self isEndgame]) {
+        _info.text = [NSString stringWithFormat:
+            @"De app maakt zelf nieuwe eindspelen met weinig stukken waarin jij kunt winnen. "
+            @"Hier is geen internet voor nodig. Elke stelling wordt gecontroleerd: bij koning + pion met een "
+            @"volledig uitgerekende tabel, bij de andere soorten met de bot.\n\n"
+            @"“D-stuk” = dame tegen paard of loper. Je hebt nu %lu extra eindspelen.", (unsigned long)n];
+    } else {
+        _info.text = [NSString stringWithFormat:
+            @"Haal gratis echte puzzels op van lichess.org (wifi nodig, geen account). "
+            @"Ze worden op deze iPad bewaard en werken daarna ook zonder internet.\n\n"
+            @"Je hebt nu %lu extra puzzels van deze soort.", (unsigned long)n];
+    }
     _deleteButton.enabled = n > 0;
     [self.view setNeedsLayout];
 }
@@ -365,15 +400,18 @@ static PuzzleItem *ItemFromLichess(NSDictionary *entry) {
     [super viewDidLayoutSubviews];
     CGFloat W = self.view.bounds.size.width;
     _scroll.frame = self.view.bounds;
-    CGFloat colW = MIN(W - 32, 560), x = (W - colW) / 2.0;
+    CGFloat colW = MIN(W - 32, 600), x = (W - colW) / 2.0;
     CGFloat y = self.topLayoutGuide.length + 16;
     CGFloat bh = [YFUI isPad] ? 60 : 50;
+    _kindLabel.frame = CGRectMake(x, y, colW, 26); y += 30;
+    _kind.frame = CGRectMake(x, y, colW, 36); y += 50;
     CGSize s = [_info sizeThatFits:CGSizeMake(colW, 1000)];
     _info.frame = CGRectMake(x, y, colW, ceil(s.height)); y += ceil(s.height) + 16;
-    for (NSArray *pair in @[@[_kindLabel, _kind], @[_levelLabel, _level], @[_countLabel, _count]]) {
-        [pair[0] setFrame:CGRectMake(x, y, colW, 26)]; y += 30;
-        [pair[1] setFrame:CGRectMake(x, y, colW, 36)]; y += 50;
-    }
+    _levelLabel.frame = CGRectMake(x, y, colW, 26); y += 30;
+    _level.frame = CGRectMake(x, y, colW, 36);
+    _egKind.frame = CGRectMake(x, y, colW, 36); y += 50;
+    _countLabel.frame = CGRectMake(x, y, colW, 26); y += 30;
+    _count.frame = CGRectMake(x, y, colW, 36); y += 50;
     _downloadButton.frame = CGRectMake(x, y, colW, bh); y += bh + 12;
     _spinner.center = CGPointMake(W / 2.0, y + 14); y += 32;
     CGSize ss = [_status sizeThatFits:CGSizeMake(colW, 400)];
@@ -382,28 +420,34 @@ static PuzzleItem *ItemFromLichess(NSDictionary *entry) {
     _scroll.contentSize = CGSizeMake(W, y + 20);
 }
 
+- (void)setBusy:(BOOL)busy text:(NSString *)text {
+    _busy = busy;
+    _downloadButton.enabled = !busy;
+    _kind.enabled = !busy;
+    if (busy) [_spinner startAnimating]; else [_spinner stopAnimating];
+    _status.textColor = [SettingsManager shared].textColor;
+    _status.text = text;
+    [self.view setNeedsLayout];
+}
+
 - (void)downloadTapped {
     if (_busy) return;
-    NSArray *angles = @[@"mix", @"mateIn1", @"mateIn2", @"endgame"];
-    NSArray *levels = @[@"easiest", @"easier", @"normal", @"harder"];
     NSArray *counts = @[@10, @25, @50];
-    NSString *angle = angles[MAX(0, _kind.selectedSegmentIndex)];
+    NSInteger nb = [counts[MAX(0, _count.selectedSegmentIndex)] integerValue];
+    if ([self isEndgame]) {
+        [self makeEndgames:nb];
+        return;
+    }
+    NSString *angle = _kind.selectedSegmentIndex == 0 ? @"mateIn1" : @"mateIn2";
+    NSArray *levels = @[@"easiest", @"easier", @"normal", @"harder"];
     NSString *level = levels[MAX(0, _level.selectedSegmentIndex)];
-    NSNumber *nb = counts[MAX(0, _count.selectedSegmentIndex)];
-    _busy = YES;
-    _downloadButton.enabled = NO;
-    [_spinner startAnimating];
-    _status.textColor = [SettingsManager shared].textColor;
-    _status.text = @"Downloaden…";
-    [self.view setNeedsLayout];
-    NSString *path = [NSString stringWithFormat:@"/api/puzzle/batch/%@?nb=%@&difficulty=%@", angle, nb, level];
+    [self setBusy:YES text:@"Downloaden…"];
+    NSString *path = [NSString stringWithFormat:@"/api/puzzle/batch/%@?nb=%ld&difficulty=%@", angle, (long)nb, level];
     __weak PuzzleDownloadViewController *weakSelf = self;
     [[LichessClient shared] publicRequest:path completion:^(NSInteger status, id json, NSString *errorText) {
-        PuzzleDownloadViewController *me = weakSelf;
-        if (!me) return;
         NSArray *list = [json isKindOfClass:[NSDictionary class]] ? json[@"puzzles"] : nil;
         if (errorText || ![list isKindOfClass:[NSArray class]]) {
-            [me finishWithText:errorText ?: @"Lichess gaf een onverwacht antwoord." ok:NO];
+            [weakSelf finishWithText:errorText ?: @"Lichess gaf een onverwacht antwoord." ok:NO];
             return;
         }
         // Omzetten op de achtergrond (notatie lezen kost even tijd op een oude iPad).
@@ -419,30 +463,62 @@ static PuzzleItem *ItemFromLichess(NSDictionary *entry) {
                 NSUInteger dup = items.count - added;
                 NSMutableString *t = [NSMutableString stringWithFormat:@"✓ %lu nieuwe puzzels toegevoegd.", (unsigned long)added];
                 if (dup) [t appendFormat:@" %lu had je al.", (unsigned long)dup];
-                if (bad) [t appendFormat:@" %lu konden niet worden gelezen.", (unsigned long)bad];
+                if (bad) [t appendFormat:@" %lu overgeslagen.", (unsigned long)bad];
                 [weakSelf finishWithText:t ok:YES];
             });
         });
     }];
 }
 
+- (void)makeEndgames:(NSInteger)count {
+    int kind = (int)_egKind.selectedSegmentIndex;   // zelfde volgorde als EG_MIX, EG_QUEEN, ...
+    [self setBusy:YES text:@"Eindspelen maken en controleren…"];
+    __weak PuzzleDownloadViewController *weakSelf = self;
+    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+        uint32_t seed = (uint32_t)([NSDate timeIntervalSinceReferenceDate] * 1000.0) ^ arc4random();
+        NSMutableArray *items = [NSMutableArray array];
+        static const int ratings[EG_KIND_COUNT] = { 1000, 700, 900, 1100, 600, 1500, 1100 };
+        for (NSInteger i = 0; i < count; i++) {
+            CEPosition p;
+            int limit = 30;
+            const char *title = NULL, *hint = NULL;
+            int k = kind;
+            if (k == EG_MIX) k = 1 + (int)(arc4random_uniform(EG_KIND_COUNT - 1));
+            if (!ce_generate_endgame(k, &seed, &p, &limit, &title, &hint)) continue;
+            char fen[128];
+            ce_to_fen(&p, fen, sizeof fen);
+            PuzzleItem *it = [[PuzzleItem alloc] init];
+            it.type = CP_ENDGAME;
+            it.n = limit;
+            it.fen = [NSString stringWithUTF8String:fen];
+            it.title = CStr(title);
+            it.hint = CStr(hint);
+            it.rating = ratings[k];
+            it.downloaded = YES;
+            [items addObject:it];
+        }
+        dispatch_async(dispatch_get_main_queue(), ^{
+            NSUInteger added = [PuzzleStore addItems:items];
+            [weakSelf finishWithText:[NSString stringWithFormat:@"✓ %lu nieuwe eindspelen gemaakt.", (unsigned long)added] ok:YES];
+        });
+    });
+}
+
 - (void)finishWithText:(NSString *)text ok:(BOOL)ok {
-    _busy = NO;
-    _downloadButton.enabled = YES;
-    [_spinner stopAnimating];
+    [self setBusy:NO text:text];
     SettingsManager *s = [SettingsManager shared];
     _status.textColor = ok ? s.okColor : s.errorColor;
-    _status.text = text;
     [self updateInfo];
 }
 
 - (void)deleteTapped {
-    UIAlertController *a = [UIAlertController alertControllerWithTitle:@"Alles verwijderen?"
-                                                               message:@"Alle gedownloade puzzels worden van deze iPad verwijderd. De ingebouwde puzzels blijven."
+    NSInteger cat = _kind.selectedSegmentIndex;
+    UIAlertController *a = [UIAlertController alertControllerWithTitle:@"Verwijderen?"
+                                                               message:@"Alle extra puzzels van deze soort worden van deze iPad verwijderd. De ingebouwde puzzels blijven."
                                                         preferredStyle:UIAlertControllerStyleAlert];
     [a addAction:[UIAlertAction actionWithTitle:@"Annuleren" style:UIAlertActionStyleCancel handler:nil]];
     [a addAction:[UIAlertAction actionWithTitle:@"Verwijderen" style:UIAlertActionStyleDestructive handler:^(UIAlertAction *act) {
-        [PuzzleStore removeAll];
+        [PuzzleStore removeGroup:cat];
         self->_status.text = @"Verwijderd.";
         [self updateInfo];
     }]];
@@ -451,17 +527,141 @@ static PuzzleItem *ItemFromLichess(NSDictionary *entry) {
 
 @end
 
-#pragma mark - Lijst
+#pragma mark - Startscherm met drie vakjes
 
 @interface PuzzleViewController ()
 - (instancetype)initWithItems:(NSArray *)items index:(NSUInteger)index;
 @end
 
-@implementation PuzzleListViewController
+@interface PuzzleCategoryViewController : UITableViewController
+@property (nonatomic) NSInteger category;
+@end
+
+// Een groot vakje om aan te tikken.
+@interface PuzzleTile : UIControl
+@property (nonatomic, strong) UILabel *iconLabel;
+@property (nonatomic, strong) UILabel *nameLabel;
+@property (nonatomic, strong) UILabel *countLabel;
+@end
+
+@implementation PuzzleTile
+- (instancetype)initWithFrame:(CGRect)frame {
+    self = [super initWithFrame:frame];
+    if (self) {
+        self.layer.cornerRadius = 16;
+        _iconLabel = [[UILabel alloc] init];
+        _nameLabel = [[UILabel alloc] init];
+        _countLabel = [[UILabel alloc] init];
+        for (UILabel *l in @[_iconLabel, _nameLabel, _countLabel]) {
+            l.textAlignment = NSTextAlignmentCenter;
+            l.adjustsFontSizeToFitWidth = YES;
+            l.minimumScaleFactor = 0.5;
+            l.userInteractionEnabled = NO;
+            [self addSubview:l];
+        }
+    }
+    return self;
+}
+- (void)layoutSubviews {
+    [super layoutSubviews];
+    CGSize s = self.bounds.size;
+    CGFloat h = s.height;
+    _iconLabel.font = [UIFont systemFontOfSize:MIN(h * 0.38, s.width * 0.3)];
+    _nameLabel.font = [UIFont boldSystemFontOfSize:MIN(h * 0.14, 28)];
+    _countLabel.font = [UIFont systemFontOfSize:MIN(h * 0.09, 18)];
+    _iconLabel.frame = CGRectMake(8, h * 0.06, s.width - 16, h * 0.46);
+    _nameLabel.frame = CGRectMake(8, h * 0.54, s.width - 16, h * 0.2);
+    _countLabel.frame = CGRectMake(8, h * 0.75, s.width - 16, h * 0.16);
+}
+- (void)setHighlighted:(BOOL)highlighted {
+    [super setHighlighted:highlighted];
+    self.alpha = highlighted ? 0.6 : 1.0;
+}
+@end
+
+@implementation PuzzleHomeViewController {
+    NSArray *_tiles;
+    UILabel *_intro;
+}
 
 - (void)viewDidLoad {
     [super viewDidLoad];
     self.title = @"Puzzels";
+    _intro = [YFUI labelWithSize:[YFUI isPad] ? 18 : 15 bold:NO];
+    _intro.textAlignment = NSTextAlignmentCenter;
+    _intro.text = @"Kies wat je wilt oefenen.";
+    [self.view addSubview:_intro];
+    NSMutableArray *tiles = [NSMutableArray array];
+    NSArray *icons = @[@"♛", @"♜", @"♚"];
+    NSArray *names = @[@"Mat in 1", @"Mat in 2", @"Eindspel"];
+    for (NSInteger i = 0; i < 3; i++) {
+        PuzzleTile *t = [[PuzzleTile alloc] initWithFrame:CGRectZero];
+        t.tag = i;
+        t.iconLabel.text = icons[i];
+        t.nameLabel.text = names[i];
+        [t addTarget:self action:@selector(tileTapped:) forControlEvents:UIControlEventTouchUpInside];
+        [self.view addSubview:t];
+        [tiles addObject:t];
+    }
+    _tiles = tiles;
+}
+
+- (void)viewWillAppear:(BOOL)animated {
+    [super viewWillAppear:animated];
+    [self.navigationController setNavigationBarHidden:NO animated:animated];
+    [YFUI applyThemeToController:self];
+    SettingsManager *s = [SettingsManager shared];
+    _intro.textColor = s.secondaryTextColor;
+    NSArray *subs = @[@"zet mat in één zet", @"zet mat in twee zetten", @"win met weinig stukken"];
+    for (PuzzleTile *t in _tiles) {
+        NSArray *items = ItemsInGroup(t.tag);
+        NSInteger solved = 0;
+        for (PuzzleItem *p in items) if ([s isPuzzleSolved:p.fen]) solved++;
+        t.backgroundColor = t.tag == 0 ? s.accentColor : s.buttonColor;
+        UIColor *fg = t.tag == 0 ? (s.darkTheme ? [UIColor colorWithWhite:0.1 alpha:1] : [UIColor whiteColor]) : s.buttonTextColor;
+        t.iconLabel.textColor = fg;
+        t.nameLabel.textColor = fg;
+        t.countLabel.textColor = fg;
+        t.countLabel.text = [NSString stringWithFormat:@"%@ • %ld van %lu opgelost", subs[t.tag], (long)solved, (unsigned long)items.count];
+    }
+}
+
+- (void)viewDidLayoutSubviews {
+    [super viewDidLayoutSubviews];
+    CGFloat W = self.view.bounds.size.width, H = self.view.bounds.size.height;
+    CGFloat top = self.topLayoutGuide.length + 12, bottom = self.bottomLayoutGuide.length + 16;
+    _intro.frame = CGRectMake(16, top, W - 32, 26);
+    top += 36;
+    CGFloat m = 16, gap = 14;
+    CGFloat availH = H - top - bottom;
+    if (W > H) {
+        CGFloat w = (W - 2 * m - 2 * gap) / 3.0;
+        CGFloat h = MIN(availH, w * 1.15);
+        CGFloat y = top + (availH - h) / 2.0;
+        for (NSInteger i = 0; i < 3; i++) [_tiles[i] setFrame:CGRectMake(m + i * (w + gap), y, w, h)];
+    } else {
+        CGFloat w = MIN(W - 2 * m, 560);
+        CGFloat h = MIN((availH - 2 * gap) / 3.0, w * 0.6);
+        CGFloat y = top + (availH - (3 * h + 2 * gap)) / 2.0;
+        for (NSInteger i = 0; i < 3; i++) [_tiles[i] setFrame:CGRectMake((W - w) / 2.0, y + i * (h + gap), w, h)];
+    }
+}
+
+- (void)tileTapped:(PuzzleTile *)t {
+    PuzzleCategoryViewController *list = [[PuzzleCategoryViewController alloc] initWithStyle:UITableViewStyleGrouped];
+    list.category = t.tag;
+    [self.navigationController pushViewController:list animated:YES];
+}
+
+@end
+
+#pragma mark - Lijst van een soort
+
+@implementation PuzzleCategoryViewController
+
+- (void)viewDidLoad {
+    [super viewDidLoad];
+    self.title = GroupName(self.category);
     self.tableView.rowHeight = [YFUI isPad] ? 60 : 50;
 }
 
@@ -479,7 +679,8 @@ static PuzzleItem *ItemFromLichess(NSDictionary *entry) {
     CGFloat w = self.tableView.bounds.size.width;
     CGFloat bh = [YFUI isPad] ? 58 : 50;
     UIView *header = [[UIView alloc] initWithFrame:CGRectMake(0, 0, w, bh + 24)];
-    YFButton *b = [YFUI buttonWithTitle:@"⬇ Meer puzzels downloaden (gratis)" target:self action:@selector(downloadTapped)];
+    NSString *title = self.category == 2 ? @"➕ Meer eindspelen maken (gratis)" : @"⬇ Meer puzzels downloaden (gratis)";
+    YFButton *b = [YFUI buttonWithTitle:title target:self action:@selector(moreTapped)];
     b.primary = YES;
     CGFloat colW = MIN(w - 32, 560);
     b.frame = CGRectMake((w - colW) / 2.0, 14, colW, bh);
@@ -495,33 +696,28 @@ static PuzzleItem *ItemFromLichess(NSDictionary *entry) {
     }];
 }
 
-- (void)downloadTapped {
-    [self.navigationController pushViewController:[[PuzzleDownloadViewController alloc] init] animated:YES];
-}
-
-- (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView {
-    return kGroupCount;
+- (void)moreTapped {
+    PuzzleDownloadViewController *d = [[PuzzleDownloadViewController alloc] init];
+    d.category = self.category;
+    [self.navigationController pushViewController:d animated:YES];
 }
 
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
-    NSInteger n = (NSInteger)ItemsInGroup(section).count;
-    if (section == 4 && n == 0) return 1;   // uitlegregel
-    return n;
+    return (NSInteger)ItemsInGroup(self.category).count;
 }
 
 - (NSString *)tableView:(UITableView *)tableView titleForHeaderInSection:(NSInteger)section {
-    NSArray *items = ItemsInGroup(section);
+    NSArray *items = ItemsInGroup(self.category);
     NSInteger solved = 0;
     for (PuzzleItem *p in items) if ([[SettingsManager shared] isPuzzleSolved:p.fen]) solved++;
-    return [NSString stringWithFormat:@"%@ (%ld van %lu opgelost)", GroupName(section), (long)solved, (unsigned long)items.count];
+    return [NSString stringWithFormat:@"%ld van %lu opgelost", (long)solved, (unsigned long)items.count];
 }
 
 - (NSString *)tableView:(UITableView *)tableView titleForFooterInSection:(NSInteger)section {
-    if (section == 1) return @"De meeste puzzels komen uit de openbare lichess-puzzeldatabase (vrij te gebruiken).";
-    if (section == 2) return @"Vind steeds de beste zet. De tegenstander antwoordt vanzelf. De markering is de laatste zet van je tegenstander.";
-    if (section == 3) return @"Hier speel je tegen de bot. Zet mat binnen het aantal zetten.";
-    if (section == 4) return @"Veeg naar links om een gedownloade puzzel te verwijderen.";
-    return nil;
+    if (self.category == 2)
+        return @"Je speelt tegen de bot en moet winnen: zet mat binnen het aantal zetten. Remise of pat telt niet. "
+               @"De ingebouwde eindspelen zijn gecontroleerd met de eindspel-database (tablebase) van lichess.";
+    return @"Puzzels met ⬇ heb je zelf gedownload; veeg naar links om ze te verwijderen.";
 }
 
 - (void)tableView:(UITableView *)tableView willDisplayHeaderView:(UIView *)view forSection:(NSInteger)section {
@@ -542,33 +738,26 @@ static PuzzleItem *ItemFromLichess(NSDictionary *entry) {
     cell.textLabel.textColor = s.textColor;
     cell.detailTextLabel.textColor = s.secondaryTextColor;
     cell.textLabel.font = [UIFont boldSystemFontOfSize:[YFUI isPad] ? 19 : 16];
-    NSArray *items = ItemsInGroup(indexPath.section);
-    if (indexPath.section == 4 && !items.count) {
-        cell.textLabel.text = @"Nog niets gedownload";
-        cell.detailTextLabel.text = @"Tik bovenaan op “Meer puzzels downloaden”.";
-        cell.accessoryType = UITableViewCellAccessoryNone;
-        cell.selectionStyle = UITableViewCellSelectionStyleNone;
-        return cell;
-    }
+    NSArray *items = ItemsInGroup(self.category);
     PuzzleItem *p = items[indexPath.row];
     BOOL solved = [s isPuzzleSolved:p.fen];
     BOOL black = [p.fen rangeOfString:@" b "].location != NSNotFound;
-    cell.textLabel.text = [NSString stringWithFormat:@"%ld. %@%@", (long)indexPath.row + 1, p.title, solved ? @"  ✓" : @""];
+    cell.textLabel.text = [NSString stringWithFormat:@"%ld. %@%@%@", (long)indexPath.row + 1,
+                           p.downloaded ? @"⬇ " : @"", p.title, solved ? @"  ✓" : @""];
     NSString *who = black ? @"Zwart" : @"Wit";
     NSString *detail;
     if (p.type == CP_MATE) detail = [NSString stringWithFormat:@"%@ aan zet • mat in %d", who, p.n];
-    else if (p.type == CP_LINE) detail = [NSString stringWithFormat:@"%@ aan zet • %d %@ vinden", who, p.n, p.n == 1 ? @"zet" : @"zetten"];
-    else detail = [NSString stringWithFormat:@"%@ aan zet • mat binnen %d zetten", who, p.n];
+    else detail = [NSString stringWithFormat:@"Jij speelt %@ • win binnen %d zetten", black ? @"zwart" : @"wit", p.n];
     NSString *diff = DifficultyText(p.rating);
     if (diff) detail = [detail stringByAppendingFormat:@" • %@", diff];
     cell.detailTextLabel.text = detail;
     cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
-    cell.selectionStyle = UITableViewCellSelectionStyleDefault;
     return cell;
 }
 
 - (BOOL)tableView:(UITableView *)tableView canEditRowAtIndexPath:(NSIndexPath *)indexPath {
-    return indexPath.section == 4 && ItemsInGroup(4).count > 0;
+    NSArray *items = ItemsInGroup(self.category);
+    return indexPath.row < (NSInteger)items.count && [items[indexPath.row] downloaded];
 }
 
 - (NSString *)tableView:(UITableView *)tableView titleForDeleteConfirmationButtonForRowAtIndexPath:(NSIndexPath *)indexPath {
@@ -577,21 +766,19 @@ static PuzzleItem *ItemFromLichess(NSDictionary *entry) {
 
 - (void)tableView:(UITableView *)tableView commitEditingStyle:(UITableViewCellEditingStyle)editingStyle
     forRowAtIndexPath:(NSIndexPath *)indexPath {
-    if (editingStyle != UITableViewCellEditingStyleDelete || indexPath.section != 4) return;
-    NSArray *items = ItemsInGroup(4);
-    if (indexPath.row >= (NSInteger)items.count) return;
+    if (editingStyle != UITableViewCellEditingStyleDelete) return;
+    NSArray *items = ItemsInGroup(self.category);
+    if (indexPath.row >= (NSInteger)items.count || ![items[indexPath.row] downloaded]) return;
     [PuzzleStore removeItemWithFEN:[items[indexPath.row] fen]];
     [tableView reloadData];
 }
 
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
     [tableView deselectRowAtIndexPath:indexPath animated:YES];
-    NSArray *items = ItemsInGroup(indexPath.section);
+    NSArray *items = ItemsInGroup(self.category);
     if (indexPath.row >= (NSInteger)items.count) return;
-    NSArray *all = AllItemsInOrder();
-    NSUInteger idx = [all indexOfObjectIdenticalTo:items[indexPath.row]];
-    if (idx == NSNotFound) idx = 0;
-    [self.navigationController pushViewController:[[PuzzleViewController alloc] initWithItems:all index:idx] animated:YES];
+    [self.navigationController pushViewController:[[PuzzleViewController alloc] initWithItems:items index:indexPath.row]
+                                         animated:YES];
 }
 
 @end
@@ -640,10 +827,8 @@ static PuzzleItem *ItemFromLichess(NSDictionary *entry) {
 }
 
 - (instancetype)initWithPuzzleIndex:(int)index {
-    NSArray *all = AllItemsInOrder();
-    PuzzleItem *wanted = (index >= 0 && index < (int)BuiltinItems().count) ? BuiltinItems()[index] : nil;
-    NSUInteger idx = wanted ? [all indexOfObjectIdenticalTo:wanted] : 0;
-    return [self initWithItems:all index:idx == NSNotFound ? 0 : idx];
+    NSArray *all = BuiltinItems();
+    return [self initWithItems:all index:(index >= 0 && index < (int)all.count) ? (NSUInteger)index : 0];
 }
 
 - (void)viewDidLoad {
@@ -741,7 +926,7 @@ static PuzzleItem *ItemFromLichess(NSDictionary *entry) {
     NSArray *group = ItemsInGroup(_puzzle.group);
     NSUInteger number = [group indexOfObjectIdenticalTo:_puzzle];
     NSInteger g = _puzzle.group;
-    NSString *kind = g == 0 ? @"Mat in 1" : g == 1 ? @"Mat in 2" : g == 4 ? @"Gedownload" : @"Eindspel";
+    NSString *kind = GroupName(g);
     self.title = number == NSNotFound ? kind : [NSString stringWithFormat:@"%@ • %lu", kind, (unsigned long)number + 1];
     [self updateTask];
     [self setFeedback:@"Tik op een stuk en dan op een veld." color:nil];
@@ -764,7 +949,8 @@ static PuzzleItem *ItemFromLichess(NSDictionary *entry) {
         t = [NSString stringWithFormat:@"%@ • %@ aan zet: vind de beste zet (%d van %d).",
              _puzzle.title, [self colorName], mine, _puzzle.n];
     } else {
-        t = [NSString stringWithFormat:@"%@: zet mat tegen de bot. Nog %d zetten over.", _puzzle.title, _movesLeft];
+        t = [NSString stringWithFormat:@"%@ \u2022 %@ aan zet: win! Zet mat tegen de bot. Nog %d zetten over.",
+             _puzzle.title, [self colorName], _movesLeft];
     }
     _taskLabel.text = t;
     [self.view setNeedsLayout];

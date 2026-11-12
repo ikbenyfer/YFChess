@@ -150,8 +150,7 @@
 }
 
 - (void)puzzlesTapped {
-    [self.navigationController pushViewController:[[PuzzleListViewController alloc] initWithStyle:UITableViewStyleGrouped]
-                                         animated:YES];
+    [self.navigationController pushViewController:[[PuzzleHomeViewController alloc] init] animated:YES];
 }
 
 - (void)onlineTapped {
