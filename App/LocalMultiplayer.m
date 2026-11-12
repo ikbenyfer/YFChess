@@ -13,6 +13,8 @@
     UISwitch *_flipSwitch;
     UILabel *_hideLabel;
     UISwitch *_hideSwitch;
+    UILabel *_ratingLabel;
+    UISwitch *_ratingSwitch;
     YFButton *_startButton;
     YFButton *_savedButton;
     YFButton *_customButton;
@@ -37,6 +39,12 @@
     _hideSwitch = [YFUI themedSwitch];
     [_hideSwitch addTarget:self action:@selector(switchChanged) forControlEvents:UIControlEventValueChanged];
     [self.view addSubview:_hideSwitch];
+    _ratingLabel = [YFUI labelWithSize:fs bold:YES];
+    _ratingLabel.text = @"Zetbeoordeling (beste zet … blunder)";
+    [self.view addSubview:_ratingLabel];
+    _ratingSwitch = [YFUI themedSwitch];
+    [_ratingSwitch addTarget:self action:@selector(switchChanged) forControlEvents:UIControlEventValueChanged];
+    [self.view addSubview:_ratingSwitch];
     _startButton = [YFUI buttonWithTitle:@"▶ Start (normale opstelling)" target:self action:@selector(startTapped)];
     _startButton.primary = YES;
     _savedButton = [YFUI buttonWithTitle:@"Start vanaf opgeslagen positie" target:self action:@selector(savedTapped)];
@@ -54,6 +62,9 @@
     _intro.textColor = s.secondaryTextColor;
     _flipLabel.textColor = s.textColor;
     _hideLabel.textColor = s.textColor;
+    _ratingLabel.textColor = s.textColor;
+    _ratingSwitch.onTintColor = s.accentColor;
+    _ratingSwitch.on = s.moveRating;
     _flipSwitch.onTintColor = s.accentColor;
     _hideSwitch.onTintColor = s.accentColor;
     _flipSwitch.on = s.autoFlip;
@@ -73,7 +84,9 @@
     _flipLabel.frame = CGRectMake(x, y, colW - swW - 10, 44);
     _flipSwitch.frame = CGRectMake(x + colW - 51, y + 6, 51, 31); y += 60;
     _hideLabel.frame = CGRectMake(x, y, colW - swW - 10, 44);
-    _hideSwitch.frame = CGRectMake(x + colW - 51, y + 6, 51, 31); y += 72;
+    _hideSwitch.frame = CGRectMake(x + colW - 51, y + 6, 51, 31); y += 60;
+    _ratingLabel.frame = CGRectMake(x, y, colW - swW - 10, 44);
+    _ratingSwitch.frame = CGRectMake(x + colW - 51, y + 6, 51, 31); y += 72;
     _startButton.frame = CGRectMake(x, y, colW, bh); y += bh + 12;
     _savedButton.frame = CGRectMake(x, y, colW, bh); y += bh + 12;
     _customButton.frame = CGRectMake(x, y, colW, bh);
@@ -83,6 +96,7 @@
     SettingsManager *s = [SettingsManager shared];
     s.autoFlip = _flipSwitch.on;
     s.hideLastMove = _hideSwitch.on;
+    s.moveRating = _ratingSwitch.on;
     [s save];
 }
 

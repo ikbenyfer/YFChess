@@ -29,10 +29,18 @@ typedef NS_ENUM(NSInteger, GameMode) {
 
 // Wordt aangeroepen na elke zet (from/to voor de animatie, -1 = geen animatie).
 @property (nonatomic, copy) void (^onChange)(GameManager *game, int from, int to);
+// Zetbeoordeling aan of uit (kies je voor het potje begint).
+@property (nonatomic) BOOL ratingEnabled;
+// Wordt aangeroepen als een zetbeoordeling klaar is.
+@property (nonatomic, copy) void (^onRatingChange)(GameManager *game);
 // Wordt aangeroepen als de bot begint of stopt met denken.
 @property (nonatomic, copy) void (^onThinkingChange)(GameManager *game);
 
 - (NSArray *)sanMoves;
+// Gegevens van halve zet i: @"rating" (CBRating), @"best" (betere zet), @"loss", @"color", @"pending".
+- (NSDictionary *)recordAtPly:(NSUInteger)ply;
+// Gemiddelde nauwkeurigheid (0-100) van een kleur; count = aantal beoordeelde zetten.
+- (double)accuracyForColor:(int)color count:(int *)count;
 - (NSArray *)capturedByColor:(int)color;   // stukken (NSNumber) die deze kleur heeft geslagen
 - (NSArray *)legalTargetsFrom:(int)square;
 - (BOOL)isPromotionFrom:(int)from to:(int)to;

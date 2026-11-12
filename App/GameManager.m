@@ -19,6 +19,7 @@
     NSMutableData *_hashes;     // Zobrist-sleutels van alle stellingen
     BotCancelToken *_token;
     NSUInteger _generation;
+    dispatch_queue_t _analysisQueue;
 }
 
 - (instancetype)initWithFEN:(NSString *)fen mode:(GameMode)mode humanColor:(int)humanColor botLevel:(NSInteger)level {
@@ -29,6 +30,7 @@
         _mode = mode;
         _humanColor = humanColor;
         _botLevel = level;
+        _analysisQueue = dispatch_queue_create("nl.yf.chess.analyse", DISPATCH_QUEUE_SERIAL);
         [self resetToInitial];
     }
     return self;
@@ -38,8 +40,16 @@
     if (_token) _token->flag = 1;
 }
 
+- (void)cancelAnalyses {
+    for (NSDictionary *r in _records) {
+        BotCancelToken *t = r[@"token"];
+        if (t) t->flag = 1;
+    }
+}
+
 - (void)resetToInitial {
     [self stopBot];
+    [self cancelAnalyses];
     _pos = _initial;
     _records = [NSMutableArray array];
     _hashes = [NSMutableData dataWithBytes:&_pos.hash length:sizeof(uint64_t)];
@@ -104,11 +114,16 @@
     ce_move_to_san(&_pos, m, san, sizeof san);
     uint8_t captured = (m.flags & CE_FLAG_EP) ? CE_PIECE(_pos.side ^ 1, CE_PAWN) : _pos.board[m.to];
     NSData *before = [NSData dataWithBytes:&_pos length:sizeof(CEPosition)];
-    [_records addObject:@{ @"pos": before,
-                           @"san": [NSString stringWithUTF8String:san],
-                           @"cap": @(captured),
-                           @"from": @(m.from),
-                           @"to": @(m.to) }];
+    NSMutableDictionary *rec = [@{ @"pos": before,
+                                   @"san": [NSString stringWithUTF8String:san],
+                                   @"cap": @(captured),
+                                   @"from": @(m.from),
+                                   @"to": @(m.to),
+                                   @"color": @(_pos.side) } mutableCopy];
+    [_records addObject:rec];
+    if (_ratingEnabled && (_mode == GameModeLocal || _pos.side == _humanColor)) {
+        [self analyseRecord:rec before:_pos move:m history:[_hashes copy]];
+    }
     ce_make(&_pos, m);
     [_hashes appendBytes:&_pos.hash length:sizeof(uint64_t)];
     _lastFrom = m.from;
@@ -116,6 +131,55 @@
     [self updateStatus];
     if (self.onChange) self.onChange(self, m.from, m.to);
     [self startBotIfNeeded];
+}
+
+- (void)analyseRecord:(NSMutableDictionary *)rec before:(CEPosition)before move:(CEMove)m history:(NSData *)hist {
+    BotCancelToken *token = [[BotCancelToken alloc] init];
+    rec[@"token"] = token;
+    rec[@"pending"] = @YES;
+    __weak GameManager *weakSelf = self;
+    dispatch_async(_analysisQueue, ^{
+        CBMoveAnalysis a;
+        memset(&a, 0, sizeof(a));
+        int ok = 0;
+        if (!token->flag)
+            ok = cb_analyse_move(&before, (const uint64_t *)hist.bytes, (int)(hist.length / sizeof(uint64_t)),
+                                 m, 3, &a, &token->flag);
+        NSString *bestSan = nil;
+        if (ok && a.rating != CB_RATE_BEST && a.rating != CB_RATE_FORCED) {
+            char buf[16];
+            ce_move_to_san(&before, a.best, buf, sizeof buf);
+            bestSan = [NSString stringWithUTF8String:buf];
+        }
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [rec removeObjectForKey:@"pending"];
+            [rec removeObjectForKey:@"token"];
+            GameManager *me = weakSelf;
+            if (!me || !ok || token->flag) return;
+            if ([me->_records indexOfObjectIdenticalTo:rec] == NSNotFound) return;
+            rec[@"rating"] = @(a.rating);
+            if (a.rating != CB_RATE_FORCED) rec[@"loss"] = @(a.winLoss);
+            if (bestSan) rec[@"best"] = bestSan;
+            if (me.onRatingChange) me.onRatingChange(me);
+        });
+    });
+}
+
+- (NSDictionary *)recordAtPly:(NSUInteger)ply {
+    return ply < _records.count ? _records[ply] : nil;
+}
+
+- (double)accuracyForColor:(int)color count:(int *)count {
+    double sum = 0;
+    int n = 0;
+    for (NSDictionary *r in _records) {
+        NSNumber *loss = r[@"loss"];
+        if (!loss || [r[@"color"] intValue] != color) continue;
+        sum += cb_move_accuracy(loss.doubleValue);
+        n++;
+    }
+    if (count) *count = n;
+    return n ? sum / n : 0;
 }
 
 - (BOOL)makeMoveFrom:(int)from to:(int)to promotion:(int)promoType {
@@ -133,6 +197,8 @@
 - (void)popRecord {
     NSDictionary *r = _records.lastObject;
     if (!r) return;
+    BotCancelToken *t = r[@"token"];
+    if (t) t->flag = 1;
     [r[@"pos"] getBytes:&_pos length:sizeof(CEPosition)];
     [_records removeLastObject];
     _hashes.length = _hashes.length - sizeof(uint64_t);

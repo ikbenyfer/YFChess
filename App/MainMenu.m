@@ -151,6 +151,8 @@
     UILabel *_levelLabel;
     UISegmentedControl *_levelControl;
     UILabel *_levelInfo;
+    UILabel *_ratingLabel;
+    UISwitch *_ratingSwitch;
     YFButton *_startButton;
     YFButton *_savedButton;
     YFButton *_customButton;
@@ -177,6 +179,15 @@
     [self.view addSubview:_levelControl];
     _levelInfo = [YFUI labelWithSize:fs - 2 bold:NO];
     [self.view addSubview:_levelInfo];
+    _ratingLabel = [YFUI labelWithSize:fs bold:YES];
+    _ratingLabel.text = @"Zetbeoordeling (beste zet … blunder)";
+    _ratingLabel.adjustsFontSizeToFitWidth = YES;
+    _ratingLabel.minimumScaleFactor = 0.6;
+    _ratingLabel.numberOfLines = 1;
+    [self.view addSubview:_ratingLabel];
+    _ratingSwitch = [YFUI themedSwitch];
+    [_ratingSwitch addTarget:self action:@selector(ratingChanged) forControlEvents:UIControlEventValueChanged];
+    [self.view addSubview:_ratingSwitch];
     _startButton = [YFUI buttonWithTitle:@"▶ Start (normale opstelling)" target:self action:@selector(startTapped)];
     _startButton.primary = YES;
     _savedButton = [YFUI buttonWithTitle:@"Start vanaf opgeslagen positie" target:self action:@selector(savedTapped)];
@@ -192,7 +203,9 @@
     [self.navigationController setNavigationBarHidden:NO animated:animated];
     [YFUI applyThemeToController:self];
     SettingsManager *s = [SettingsManager shared];
-    for (UILabel *l in @[_colorLabel, _levelLabel]) l.textColor = s.textColor;
+    for (UILabel *l in @[_colorLabel, _levelLabel, _ratingLabel]) l.textColor = s.textColor;
+    _ratingSwitch.onTintColor = s.accentColor;
+    _ratingSwitch.on = s.moveRating;
     _levelInfo.textColor = s.secondaryTextColor;
     _colorControl.tintColor = s.accentColor;
     _levelControl.tintColor = s.accentColor;
@@ -212,7 +225,9 @@
     _colorControl.frame = CGRectMake(x, y, colW, 40); y += 58;
     _levelLabel.frame = CGRectMake(x, y, colW, 28); y += 34;
     _levelControl.frame = CGRectMake(x, y, colW, 40); y += 48;
-    _levelInfo.frame = CGRectMake(x, y, colW, 48); y += 64;
+    _levelInfo.frame = CGRectMake(x, y, colW, 48); y += 56;
+    _ratingLabel.frame = CGRectMake(x, y, colW - 64, 40);
+    _ratingSwitch.frame = CGRectMake(x + colW - 51, y + 4, 51, 31); y += 56;
     _startButton.frame = CGRectMake(x, y, colW, bh); y += bh + 12;
     _savedButton.frame = CGRectMake(x, y, colW, bh); y += bh + 12;
     _customButton.frame = CGRectMake(x, y, colW, bh);
@@ -229,6 +244,12 @@
                        @"4 — Sterk: kijkt vier zetten vooruit.",
                        @"5 — Sterkst: denkt tot ongeveer 7 seconden na." ];
     _levelInfo.text = info[s.botLevel - 1];
+}
+
+- (void)ratingChanged {
+    SettingsManager *s = [SettingsManager shared];
+    s.moveRating = _ratingSwitch.on;
+    [s save];
 }
 
 - (int)chosenColor {

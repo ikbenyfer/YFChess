@@ -20,6 +20,8 @@
 @property (nonatomic) int lastTo;
 @property (nonatomic) int checkSquare;
 @property (nonatomic) BOOL showCoordinates;
+// Bolletje met de zetbeoordeling op een veld (-1 = geen).
+- (void)setBadgeSquare:(int)square text:(NSString *)text color:(UIColor *)color;
 
 // from/to >= 0: het stuk schuift met een animatie.
 - (void)setBoard:(const uint8_t *)board animatedFrom:(int)from to:(int)to;

@@ -8,6 +8,8 @@
     uint8_t _board[64];
     NSMutableDictionary *_pieces;   // @(veld) -> PieceView
     BOOL _animating;
+    UILabel *_badge;
+    int _badgeSquare;
 }
 
 - (instancetype)initWithFrame:(CGRect)frame {
@@ -20,6 +22,17 @@
         _lastTo = -1;
         _checkSquare = -1;
         _showCoordinates = YES;
+        _badgeSquare = -1;
+        _badge = [[UILabel alloc] init];
+        _badge.textAlignment = NSTextAlignmentCenter;
+        _badge.textColor = [UIColor whiteColor];
+        _badge.clipsToBounds = YES;
+        _badge.hidden = YES;
+        _badge.adjustsFontSizeToFitWidth = YES;
+        _badge.minimumScaleFactor = 0.5;
+        _badge.layer.borderColor = [UIColor whiteColor].CGColor;
+        _badge.layer.borderWidth = 1.5;
+        [self addSubview:_badge];
         self.contentMode = UIViewContentModeRedraw;
         self.opaque = YES;
         self.clipsToBounds = YES;
@@ -63,6 +76,38 @@
 - (void)setLastTo:(int)v { _lastTo = v; [self setNeedsDisplay]; }
 - (void)setCheckSquare:(int)v { _checkSquare = v; [self setNeedsDisplay]; }
 - (void)setShowCoordinates:(BOOL)v { _showCoordinates = v; [self setNeedsDisplay]; }
+
+- (void)positionBadge {
+    if (_badgeSquare < 0) { _badge.hidden = YES; return; }
+    CGRect r = [self rectForSquare:_badgeSquare];
+    CGFloat d = MAX(16, r.size.width * 0.40);
+    CGFloat x = CGRectGetMaxX(r) - d * 0.75, y = r.origin.y - d * 0.25;
+    if (x + d > self.bounds.size.width) x = self.bounds.size.width - d;
+    if (y < 0) y = 0;
+    CGAffineTransform t = _badge.transform;
+    _badge.transform = CGAffineTransformIdentity;
+    _badge.frame = CGRectMake(x, y, d, d);
+    _badge.transform = t;
+    _badge.layer.cornerRadius = d / 2.0;
+    _badge.font = [UIFont boldSystemFontOfSize:d * 0.55];
+    _badge.hidden = NO;
+    [self bringSubviewToFront:_badge];
+}
+
+- (void)setBadgeSquare:(int)square text:(NSString *)text color:(UIColor *)color {
+    BOOL isNew = square >= 0 && (square != _badgeSquare || ![text isEqualToString:_badge.text]);
+    _badgeSquare = square;
+    _badge.text = text;
+    _badge.backgroundColor = color;
+    if (_animating) { _badge.hidden = YES; return; }
+    [self positionBadge];
+    if (isNew && !_badge.hidden && [SettingsManager shared].animations) {
+        _badge.transform = CGAffineTransformMakeScale(0.2, 0.2);
+        [UIView animateWithDuration:0.35 delay:0 usingSpringWithDamping:0.5 initialSpringVelocity:0.8 options:0 animations:^{
+            self->_badge.transform = CGAffineTransformIdentity;
+        } completion:nil];
+    }
+}
 
 - (void)refreshTheme {
     [self setNeedsDisplay];
@@ -147,6 +192,7 @@
         [self addSubview:pv];
         _pieces[@(sq)] = pv;
     }
+    [self positionBadge];
 }
 
 - (void)setBoard:(const uint8_t *)board animatedFrom:(int)from to:(int)to {
@@ -157,6 +203,7 @@
         PieceView *victim = _pieces[@(to)];
         [self bringSubviewToFront:mover];
         _animating = YES;
+        _badge.hidden = YES;
         CGRect target = [self rectForSquare:to];
         [UIView animateWithDuration:0.22 delay:0 options:UIViewAnimationOptionCurveEaseInOut animations:^{
             mover.frame = target;
@@ -194,6 +241,7 @@
         UIView *v = _pieces[k];
         v.frame = [self rectForSquare:k.intValue];
     }
+    [self positionBadge];
     [self setNeedsDisplay];
 }
 

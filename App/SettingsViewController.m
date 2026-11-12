@@ -6,7 +6,7 @@
 #import "ChessPiece.h"
 #import "YFUI.h"
 
-enum { RowDark = 0, RowAnim, RowLegal, RowCoords, RowFlip, RowHide, RowCount };
+enum { RowDark = 0, RowAnim, RowLegal, RowRating, RowCoords, RowFlip, RowHide, RowCount };
 enum { SecDisplay = 0, SecLook, SecBot, SecPositions, SecCount };
 
 @implementation SettingsViewController
@@ -114,9 +114,9 @@ enum { SecDisplay = 0, SecLook, SecBot, SecPositions, SecCount };
     cell.selectionStyle = UITableViewCellSelectionStyleNone;
 
     if (indexPath.section == SecDisplay) {
-        NSArray *titles = @[ @"Donker thema", @"Animaties", @"Legale zetten tonen", @"Coördinaten op het bord",
-                             @"1 tegen 1: bord draait mee", @"1 tegen 1: vorige zet verbergen" ];
-        BOOL values[RowCount] = { s.darkTheme, s.animations, s.showLegalMoves, s.showCoordinates, s.autoFlip, s.hideLastMove };
+        NSArray *titles = @[ @"Donker thema", @"Animaties", @"Legale zetten tonen", @"Zetbeoordeling (beste zet … blunder)",
+                             @"Coördinaten op het bord", @"1 tegen 1: bord draait mee", @"1 tegen 1: vorige zet verbergen" ];
+        BOOL values[RowCount] = { s.darkTheme, s.animations, s.showLegalMoves, s.moveRating, s.showCoordinates, s.autoFlip, s.hideLastMove };
         cell.textLabel.text = titles[indexPath.row];
         UISwitch *sw = [YFUI themedSwitch];
         sw.on = values[indexPath.row];
@@ -162,6 +162,7 @@ enum { SecDisplay = 0, SecLook, SecBot, SecPositions, SecCount };
         case RowDark: s.darkTheme = sw.on; break;
         case RowAnim: s.animations = sw.on; break;
         case RowLegal: s.showLegalMoves = sw.on; break;
+        case RowRating: s.moveRating = sw.on; break;
         case RowCoords: s.showCoordinates = sw.on; break;
         case RowFlip: s.autoFlip = sw.on; break;
         case RowHide: s.hideLastMove = sw.on; break;

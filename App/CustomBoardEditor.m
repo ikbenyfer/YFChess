@@ -32,6 +32,8 @@ typedef NS_ENUM(NSInteger, EditorTool) {
     UILabel *_toolLabel;
     UILabel *_sideLabel;
     UILabel *_validLabel;
+    UILabel *_ratingLabel;
+    UISwitch *_ratingSwitch;
     NSArray *_actionButtons;
     YFButton *_playBotButton;
     YFButton *_playLocalButton;
@@ -95,6 +97,16 @@ typedef NS_ENUM(NSInteger, EditorTool) {
     _validLabel = [YFUI labelWithSize:fs bold:NO];
     [_scroll addSubview:_validLabel];
 
+    _ratingLabel = [YFUI labelWithSize:fs bold:YES];
+    _ratingLabel.text = @"3. Zetbeoordeling tijdens het spelen";
+    _ratingLabel.numberOfLines = 1;
+    _ratingLabel.adjustsFontSizeToFitWidth = YES;
+    _ratingLabel.minimumScaleFactor = 0.6;
+    [_scroll addSubview:_ratingLabel];
+    _ratingSwitch = [YFUI themedSwitch];
+    [_ratingSwitch addTarget:self action:@selector(ratingChanged) forControlEvents:UIControlEventValueChanged];
+    [_scroll addSubview:_ratingSwitch];
+
     YFButton *clear = [YFUI buttonWithTitle:@"Leeg bord" target:self action:@selector(clearTapped)];
     YFButton *start = [YFUI buttonWithTitle:@"Beginstelling" target:self action:@selector(startTapped)];
     YFButton *swap = [YFUI buttonWithTitle:@"Kanten wisselen" target:self action:@selector(swapTapped)];
@@ -131,6 +143,9 @@ typedef NS_ENUM(NSInteger, EditorTool) {
     [_playLocalButton applyTheme];
     _toolLabel.textColor = s.textColor;
     _sideLabel.textColor = s.textColor;
+    _ratingLabel.textColor = s.textColor;
+    _ratingSwitch.onTintColor = s.accentColor;
+    _ratingSwitch.on = s.moveRating;
     _sideControl.tintColor = s.accentColor;
     _boardView.showCoordinates = s.showCoordinates;
     [_boardView refreshTheme];
@@ -171,6 +186,9 @@ typedef NS_ENUM(NSInteger, EditorTool) {
     _sideLabel.frame = CGRectMake(pad, y, w, 24);
     y += 28;
     _sideControl.frame = CGRectMake(pad, y, w, 36);
+    y += 46;
+    _ratingLabel.frame = CGRectMake(pad, y, w - 64, 36);
+    _ratingSwitch.frame = CGRectMake(pad + w - 51, y + 2, 51, 31);
     y += 46;
     CGSize vs = [_validLabel sizeThatFits:CGSizeMake(w, 1000)];
     _validLabel.frame = CGRectMake(pad, y, w, MAX(24, vs.height));
@@ -310,6 +328,12 @@ typedef NS_ENUM(NSInteger, EditorTool) {
     _tool = EditorToolMove;
     _moveFrom = -1;
     [self refresh];
+}
+
+- (void)ratingChanged {
+    SettingsManager *s = [SettingsManager shared];
+    s.moveRating = _ratingSwitch.on;
+    [s save];
 }
 
 - (void)sideChanged {

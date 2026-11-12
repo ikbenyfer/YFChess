@@ -5,6 +5,7 @@
 #import "ChessPiece.h"
 #import "SettingsManager.h"
 #import "YFUI.h"
+#import "MoveRating.h"
 
 @interface GameViewController () <ChessBoardViewDelegate>
 @end
@@ -14,6 +15,7 @@
     ChessBoardView *_board;
     UIView *_panel;
     UILabel *_statusLabel;
+    UILabel *_ratingLabel;
     UILabel *_capturedWhite;
     UILabel *_capturedBlack;
     UITextView *_movesView;
@@ -31,6 +33,7 @@
     if (self) {
         _game = game;
         _selected = -1;
+        _game.ratingEnabled = [SettingsManager shared].moveRating;
     }
     return self;
 }
@@ -62,6 +65,14 @@
     _statusLabel.adjustsFontSizeToFitWidth = YES;
     _statusLabel.minimumScaleFactor = 0.6;
     [_panel addSubview:_statusLabel];
+
+    _ratingLabel = [YFUI labelWithSize:[YFUI isPad] ? 17 : 14 bold:NO];
+    _ratingLabel.numberOfLines = 2;
+    _ratingLabel.textAlignment = NSTextAlignmentCenter;
+    _ratingLabel.adjustsFontSizeToFitWidth = YES;
+    _ratingLabel.minimumScaleFactor = 0.6;
+    _ratingLabel.hidden = !_game.ratingEnabled;
+    [_panel addSubview:_ratingLabel];
 
     _capturedWhite = [YFUI labelWithSize:big bold:NO];
     _capturedWhite.numberOfLines = 2;
@@ -99,6 +110,10 @@
     };
     _game.onThinkingChange = ^(GameManager *g) {
         [weakSelf updateTexts];
+    };
+    _game.onRatingChange = ^(GameManager *g) {
+        [weakSelf updateTexts];
+        [weakSelf updateBadge];
     };
     _announcedPly = NSNotFound;
     [self refreshAnimatedFrom:-1 to:-1];
@@ -163,6 +178,10 @@
     _statusLabel.frame = CGRectMake(pad + 26, y, pw - 2 * pad - 52, lineH * 1.6);
     _spinner.center = CGPointMake(pad + 12, y + lineH * 0.8);
     y += lineH * 1.6 + 4;
+    if (_game.ratingEnabled) {
+        _ratingLabel.frame = CGRectMake(pad, y, pw - 2 * pad, lineH * 1.8);
+        y += lineH * 1.8 + 4;
+    }
     _capturedWhite.frame = CGRectMake(pad, y, pw - 2 * pad, lineH);
     y += lineH + 2;
     _capturedBlack.frame = CGRectMake(pad, y, pw - 2 * pad, lineH);
@@ -205,7 +224,92 @@
     _board.targetSquares = @[];
     BOOL animate = s.animations && !hideLast && from >= 0;
     [_board setBoard:p.board animatedFrom:animate ? from : -1 to:to];
+    [self updateBadge];
     [self updateTexts];
+}
+
+// Bolletje op het veld van de laatste zet (alleen als die al beoordeeld is).
+- (void)updateBadge {
+    BOOL hideLast = _game.mode == GameModeLocal && [SettingsManager shared].hideLastMove;
+    NSUInteger n = _game.plyCount;
+    NSDictionary *rec = n ? [_game recordAtPly:n - 1] : nil;
+    NSNumber *rating = rec[@"rating"];
+    if (!_game.ratingEnabled || hideLast || !rating) {
+        [_board setBadgeSquare:-1 text:nil color:nil];
+        return;
+    }
+    CBRating r = (CBRating)rating.intValue;
+    [_board setBadgeSquare:[rec[@"to"] intValue] text:[MoveRating symbolFor:r] color:[MoveRating colorFor:r]];
+}
+
+- (NSString *)moveTextAtPly:(NSUInteger)i san:(NSString *)san {
+    NSString *t = [ChessPiece figurineSAN:san];
+    NSNumber *rating = [_game recordAtPly:i][@"rating"];
+    if (rating && _game.ratingEnabled) t = [t stringByAppendingFormat:@" %@", [MoveRating symbolFor:(CBRating)rating.intValue]];
+    return t;
+}
+
+- (void)updateRatingLabel {
+    if (!_game.ratingEnabled) return;
+    SettingsManager *s = [SettingsManager shared];
+    NSMutableAttributedString *text = [[NSMutableAttributedString alloc] init];
+    UIFont *font = _ratingLabel.font;
+    UIFont *bold = [UIFont boldSystemFontOfSize:font.pointSize];
+    // De laatste zet die beoordeeld wordt of is.
+    NSDictionary *rec = nil;
+    for (NSInteger i = (NSInteger)_game.plyCount - 1; i >= 0; i--) {
+        NSDictionary *r = [_game recordAtPly:(NSUInteger)i];
+        if (r[@"rating"] || r[@"pending"]) { rec = r; break; }
+    }
+    if (!rec) {
+        [text appendAttributedString:[[NSAttributedString alloc] initWithString:@"Zetbeoordeling staat aan: na elke zet zie je hoe goed hij was."
+                                                                     attributes:@{ NSFontAttributeName: font, NSForegroundColorAttributeName: s.secondaryTextColor }]];
+    } else {
+        int color = [rec[@"color"] intValue];
+        NSString *who = _game.mode == GameModeBot ? @"Jouw zet" : (color == CE_WHITE ? @"Wit" : @"Zwart");
+        NSString *san = [ChessPiece figurineSAN:rec[@"san"]];
+        [text appendAttributedString:[[NSAttributedString alloc] initWithString:[NSString stringWithFormat:@"%@ %@: ", who, san]
+                                                                     attributes:@{ NSFontAttributeName: font, NSForegroundColorAttributeName: s.textColor }]];
+        NSNumber *rating = rec[@"rating"];
+        if (!rating) {
+            [text appendAttributedString:[[NSAttributedString alloc] initWithString:@"wordt beoordeeld…"
+                                                                         attributes:@{ NSFontAttributeName: font, NSForegroundColorAttributeName: s.secondaryTextColor }]];
+        } else {
+            CBRating r = (CBRating)rating.intValue;
+            NSString *label = [NSString stringWithFormat:@"%@ %@", [MoveRating symbolFor:r], [MoveRating nameFor:r]];
+            [text appendAttributedString:[[NSAttributedString alloc] initWithString:label
+                                                                         attributes:@{ NSFontAttributeName: bold, NSForegroundColorAttributeName: [MoveRating colorFor:r] }]];
+            NSString *best = rec[@"best"];
+            if (best.length) {
+                [text appendAttributedString:[[NSAttributedString alloc] initWithString:[NSString stringWithFormat:@"  •  beter was %@", [ChessPiece figurineSAN:best]]
+                                                                             attributes:@{ NSFontAttributeName: font, NSForegroundColorAttributeName: s.secondaryTextColor }]];
+            }
+        }
+    }
+    // Nauwkeurigheid.
+    int nw = 0, nb = 0;
+    double aw = [_game accuracyForColor:CE_WHITE count:&nw];
+    double ab = [_game accuracyForColor:CE_BLACK count:&nb];
+    NSString *acc = nil;
+    if (_game.mode == GameModeBot) {
+        int n = _game.humanColor == CE_WHITE ? nw : nb;
+        double a = _game.humanColor == CE_WHITE ? aw : ab;
+        if (n) acc = [NSString stringWithFormat:@"
+Jouw nauwkeurigheid: %.0f%%", a];
+    } else if (nw || nb) {
+        acc = [NSString stringWithFormat:@"
+Nauwkeurigheid: Wit %@ • Zwart %@",
+               nw ? [NSString stringWithFormat:@"%.0f%%", aw] : @"—",
+               nb ? [NSString stringWithFormat:@"%.0f%%", ab] : @"—"];
+    }
+    if (acc) {
+        [text appendAttributedString:[[NSAttributedString alloc] initWithString:acc
+                                                                     attributes:@{ NSFontAttributeName: font, NSForegroundColorAttributeName: s.secondaryTextColor }]];
+    }
+    NSMutableParagraphStyle *ps = [[NSMutableParagraphStyle alloc] init];
+    ps.alignment = NSTextAlignmentCenter;
+    [text addAttribute:NSParagraphStyleAttributeName value:ps range:NSMakeRange(0, text.length)];
+    _ratingLabel.attributedText = text;
 }
 
 - (NSString *)capturedString:(int)color {
@@ -245,13 +349,13 @@
     int number = _game.startFullmove;
     NSUInteger i = 0;
     if (_game.startSide == CE_BLACK && moves.count) {
-        [text appendFormat:@"%d… %@\n", number, [ChessPiece figurineSAN:moves[0]]];
+        [text appendFormat:@"%d… %@\n", number, [self moveTextAtPly:0 san:moves[0]]];
         number++;
         i = 1;
     }
     for (; i < moves.count; i += 2) {
-        [text appendFormat:@"%d. %@", number, [ChessPiece figurineSAN:moves[i]]];
-        if (i + 1 < moves.count) [text appendFormat:@"   %@", [ChessPiece figurineSAN:moves[i + 1]]];
+        [text appendFormat:@"%d. %@", number, [self moveTextAtPly:i san:moves[i]]];
+        if (i + 1 < moves.count) [text appendFormat:@"   %@", [self moveTextAtPly:i + 1 san:moves[i + 1]]];
         [text appendString:@"\n"];
         number++;
     }
@@ -260,6 +364,7 @@
     if (moves.count) [_movesView scrollRangeToVisible:NSMakeRange(text.length > 0 ? text.length - 1 : 0, 0)];
 
     _undoButton.enabled = [_game canUndo];
+    [self updateRatingLabel];
 }
 
 - (void)announceIfOver {

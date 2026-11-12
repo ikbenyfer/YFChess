@@ -30,6 +30,7 @@ static UIColor *RGB(unsigned int hex) {
             @"boardTheme": @0,
             @"animations": @YES,
             @"showLegalMoves": @YES,
+            @"moveRating": @YES,
             @"showCoordinates": @YES,
             @"autoFlip": @NO,
             @"hideLastMove": @NO,
@@ -45,6 +46,7 @@ static UIColor *RGB(unsigned int hex) {
         if (_boardTheme < 0 || _boardTheme > 3) _boardTheme = 0;
         _animations = [d boolForKey:@"animations"];
         _showLegalMoves = [d boolForKey:@"showLegalMoves"];
+        _moveRating = [d boolForKey:@"moveRating"];
         _showCoordinates = [d boolForKey:@"showCoordinates"];
         _autoFlip = [d boolForKey:@"autoFlip"];
         _hideLastMove = [d boolForKey:@"hideLastMove"];
@@ -68,6 +70,7 @@ static UIColor *RGB(unsigned int hex) {
     [d setInteger:_boardTheme forKey:@"boardTheme"];
     [d setBool:_animations forKey:@"animations"];
     [d setBool:_showLegalMoves forKey:@"showLegalMoves"];
+    [d setBool:_moveRating forKey:@"moveRating"];
     [d setBool:_showCoordinates forKey:@"showCoordinates"];
     [d setBool:_autoFlip forKey:@"autoFlip"];
     [d setBool:_hideLastMove forKey:@"hideLastMove"];

@@ -13,6 +13,7 @@
 @property (nonatomic) NSInteger boardTheme; // 0 bruin, 1 groen, 2 blauw, 3 grijs
 @property (nonatomic) BOOL animations;
 @property (nonatomic) BOOL showLegalMoves;
+@property (nonatomic) BOOL moveRating;      // zetbeoordeling (beste zet ... blunder)
 @property (nonatomic) BOOL showCoordinates;
 @property (nonatomic) BOOL autoFlip;        // 1 tegen 1: bord draait mee
 @property (nonatomic) BOOL hideLastMove;    // 1 tegen 1: vorige zet niet markeren

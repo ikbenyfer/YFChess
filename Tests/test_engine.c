@@ -422,16 +422,13 @@ static int rate(const char *fen, const char *uci, CBMoveAnalysis *a) {
     CEPosition p;
     load(&p, fen);
     CEMove m;
-    if (!ce_parse_uci(&p, uci, &m)) { printf("FOUT  zet %s niet legaal
-", uci); g_fail++; return -1; }
-    if (!cb_analyse_move(&p, NULL, 0, m, 3, a, NULL)) { printf("FOUT  analyse mislukt
-"); g_fail++; return -1; }
+    if (!ce_parse_uci(&p, uci, &m)) { printf("FOUT  zet %s niet legaal\n", uci); g_fail++; return -1; }
+    if (!cb_analyse_move(&p, NULL, 0, m, 3, a, NULL)) { printf("FOUT  analyse mislukt\n"); g_fail++; return -1; }
     return (int)a->rating;
 }
 
 static void test_move_rating(void) {
-    printf("[zetbeoordeling]
-");
+    printf("[zetbeoordeling]\n");
     CBMoveAnalysis a;
     int r = rate("6k1/5ppp/8/8/8/8/8/R5K1 w - - 0 1", "a1a8", &a);
     CHECK(r == CB_RATE_BEST, "mat in 1 is de beste zet (kreeg %d)", r);
