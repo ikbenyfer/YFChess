@@ -2,4 +2,4 @@
 packages/
 ipa/
 *.o
-test_engine*
+/test_engine*
