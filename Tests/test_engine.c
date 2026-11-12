@@ -367,6 +367,33 @@ static void test_san(void) {
     CHECK(strcmp(san, "Rh8+") == 0, "SAN schaak: %s", san);
 }
 
+static void test_parse_san(void) {
+    printf("[notatie lezen]\n");
+    CEPosition p;
+    ce_start(&p);
+    const char *game = "e4 c5 Nc3 Nc6 f4 g6 Nf3 Bg7 Bc4 e6 O-O Nge7 Re1 O-O d3 d5 exd5 exd5 Bb5 Nd4 "
+                       "a3 Bg4 Ba4 Nef5 Rf1 Nxf3+ gxf3 Bh3 Re1 Bd4+ Kh1 Qh4 Nxd5 Qf2 Qe2";
+    char buf[512];
+    snprintf(buf, sizeof buf, "%s", game);
+    int count = 0, ok = 1;
+    for (char *tok = strtok(buf, " "); tok; tok = strtok(NULL, " ")) {
+        CEMove m;
+        if (!ce_parse_san(&p, tok, &m)) { ok = 0; printf("  kon %s niet lezen\n", tok); break; }
+        ce_make(&p, m);
+        count++;
+    }
+    CHECK(ok && count == 35, "partij van 35 halve zetten nagespeeld (%d)", count);
+    CEMove m;
+    CHECK(ce_parse_san(&p, "Bg2#", &m), "mat-zet Bg2# gelezen");
+    // Promotie en 0-0 met nullen.
+    load(&p, "8/4P3/8/8/8/8/k7/4K2R w K - 0 1");
+    CHECK(ce_parse_san(&p, "e8=Q", &m) && (m.flags & CE_FLAG_PROMO) && m.promo == CE_QUEEN, "promotie e8=Q gelezen");
+    CHECK(ce_parse_san(&p, "e8=N", &m) && m.promo == CE_KNIGHT, "onderpromotie e8=N gelezen");
+    CHECK(ce_parse_san(&p, "0-0", &m) && (m.flags & CE_FLAG_CASTLE), "0-0 met nullen gelezen");
+    CHECK(!ce_parse_san(&p, "Qd4", &m), "onmogelijke zet wordt geweigerd");
+    CHECK(!ce_parse_san(&p, "", &m), "lege zet wordt geweigerd");
+}
+
 static void test_bot(void) {
     printf("[bot]\n");
     CEPosition p;
@@ -587,6 +614,7 @@ int main(void) {
     test_fen_and_hash();
     test_san();
     test_bot();
+    test_parse_san();
     test_move_rating();
     test_puzzles();
     test_adaptive_bot();

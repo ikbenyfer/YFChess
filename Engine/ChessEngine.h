@@ -73,6 +73,8 @@ int ce_find_move(const CEPosition *p, int from, int to, int promo, CEMove *out);
 int ce_parse_uci(const CEPosition *p, const char *uci, CEMove *out);
 void ce_move_to_uci(CEMove m, char *buf, size_t n);
 void ce_move_to_san(const CEPosition *before, CEMove m, char *buf, size_t n);
+// Leest een zet in schaaknotatie (bijv. "Nf3", "exd5", "O-O", "e8=Q+"). 1 = gevonden.
+int ce_parse_san(const CEPosition *p, const char *san, CEMove *out);
 
 uint64_t ce_perft(const CEPosition *p, int depth);
 int ce_insufficient_material(const CEPosition *p);

@@ -525,6 +525,35 @@ void ce_move_to_san(const CEPosition *before, CEMove m, char *buf, size_t n) {
     snprintf(buf, n, "%s", s);
 }
 
+static void strip_san(const char *in, char *out, size_t n) {
+    size_t k = 0;
+    for (const char *s = in; *s && k + 1 < n; s++) {
+        char c = *s;
+        if (c == '+' || c == '#' || c == '!' || c == '?' || c == ' ') continue;
+        if (c == '0') c = 'O';   // 0-0 schrijven sommigen met nullen
+        out[k++] = c;
+    }
+    out[k] = 0;
+}
+
+int ce_parse_san(const CEPosition *p, const char *san, CEMove *out) {
+    if (!san || !*san) return 0;
+    char want[16];
+    strip_san(san, want, sizeof want);
+    CEMove mv[CE_MAX_MOVES];
+    int n = ce_gen_legal(p, mv);
+    for (int i = 0; i < n; i++) {
+        char buf[16], got[16];
+        ce_move_to_san(p, mv[i], buf, sizeof buf);
+        strip_san(buf, got, sizeof got);
+        if (strcmp(got, want) == 0) {
+            *out = mv[i];
+            return 1;
+        }
+    }
+    return 0;
+}
+
 uint64_t ce_perft(const CEPosition *p, int depth) {
     if (depth <= 0) return 1;
     CEMove mv[CE_MAX_MOVES];
