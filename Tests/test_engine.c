@@ -7,6 +7,7 @@
 #include <stdlib.h>
 #include "ChessEngine.h"
 #include "ChessBot.h"
+#include "ChessPuzzles.h"
 
 static int g_fail = 0, g_pass = 0;
 
@@ -456,6 +457,100 @@ static void test_move_rating(void) {
     CHECK(!cb_analyse_move(&p, NULL, 0, m, 5, &a, &cancel) || 1, "annuleren crasht niet");
 }
 
+static void test_puzzles(void) {
+    printf("[puzzels]\n");
+    int mates = 0, endgames = 0;
+    for (int i = 0; i < cp_count(); i++) {
+        const CPPuzzle *pz = cp_get(i);
+        CEPosition p;
+        char err[256];
+        CHECK(ce_from_fen(&p, pz->fen), "puzzel %d: FEN leesbaar", i);
+        CHECK(ce_validate(&p, err, sizeof err), "puzzel %d (%s): geldige stelling: %s", i, pz->title, err);
+        CHECK(ce_status(&p, NULL, 0) == CE_ONGOING, "puzzel %d: partij loopt nog", i);
+        if (pz->type == CP_MATE) {
+            mates++;
+            CHECK(cb_mate_in(&p, pz->n), "puzzel %d (%s): mat in %d bestaat", i, pz->title, pz->n);
+            if (pz->n > 1) CHECK(!cb_mate_in(&p, pz->n - 1), "puzzel %d (%s): niet korter dan %d", i, pz->title, pz->n);
+            CEMove m;
+            CHECK(cb_find_mate_move(&p, pz->n, &m), "puzzel %d: tip gevonden", i);
+            CHECK(cb_move_mates_within(&p, m, pz->n), "puzzel %d: tip klopt", i);
+            if (pz->n == 2) {
+                CEPosition q = p;
+                ce_make(&q, m);
+                CEMove d;
+                CHECK(cb_best_defense(&q, 1, &d), "puzzel %d: verdediging gevonden", i);
+                ce_make(&q, d);
+                CHECK(cb_mate_in(&q, 1), "puzzel %d: na verdediging nog mat in 1", i);
+            }
+        } else {
+            endgames++;
+            CHECK(pz->n >= 10, "eindspel %d: genoeg zetten", i);
+        }
+    }
+    CHECK(mates >= 20 && endgames >= 4, "genoeg puzzels (%d mat, %d eindspel)", mates, endgames);
+    // Een foute zet wordt herkend.
+    CEPosition p;
+    ce_from_fen(&p, "6k1/5ppp/8/8/8/8/5PPP/3R2K1 w - - 0 1");
+    CEMove m;
+    ce_parse_uci(&p, "d1d7", &m);
+    CHECK(!cb_move_mates_within(&p, m, 1), "Rd7 is geen mat");
+    ce_parse_uci(&p, "d1d8", &m);
+    CHECK(cb_move_mates_within(&p, m, 1), "Rd8 is mat");
+    // Pat telt niet als mat.
+    ce_from_fen(&p, "k7/2Q5/1K6/8/8/8/8/8 w - - 0 1");
+    ce_parse_uci(&p, "c7c6", &m);
+    CHECK(!cb_move_mates_within(&p, m, 1), "Qc6 is pat, geen mat");
+}
+
+static void test_adaptive_bot(void) {
+    printf("[meegroeiende bot]\n");
+    CEPosition p;
+    CEMove m;
+    for (int s = 0; s <= 100; s += 10) {
+        ce_start(&p);
+        int ok = 1;
+        for (int ply = 0; ply < 6 && ok; ply++) {
+            if (!cb_choose_move_strength(&p, NULL, 0, s, &m, NULL)) { ok = 0; break; }
+            CEMove chk;
+            if (!ce_find_move(&p, m.from, m.to, m.promo, &chk)) ok = 0;
+            else ce_make(&p, m);
+        }
+        CHECK(ok, "sterkte %d speelt legale zetten", s);
+    }
+    // Sterk: vindt mat in 1.
+    ce_from_fen(&p, "6k1/5ppp/8/8/8/8/8/R5K1 w - - 0 1");
+    cb_choose_move_strength(&p, NULL, 0, 100, &m, NULL);
+    char uci[8];
+    ce_move_to_uci(m, uci, sizeof uci);
+    CHECK(strcmp(uci, "a1a8") == 0, "sterkte 100 vindt mat in 1 (speelde %s)", uci);
+    // Ultra slecht: laat in 20 pogingen minstens een keer het mat liggen.
+    int missed = 0;
+    for (int i = 0; i < 20; i++) {
+        cb_choose_move_strength(&p, NULL, 0, 0, &m, NULL);
+        ce_move_to_uci(m, uci, sizeof uci);
+        if (strcmp(uci, "a1a8") != 0) missed++;
+    }
+    CHECK(missed >= 5, "sterkte 0 is echt zwak (liet mat %d van 20 keer liggen)", missed);
+    // Partij: sterkte 100 tegen sterkte 0 moet goed aflopen voor de sterke kant.
+    ce_start(&p);
+    uint64_t hist[400];
+    int nh = 0;
+    hist[nh++] = p.hash;
+    int plies = 0;
+    while (plies < 80 && ce_status(&p, hist, nh) == CE_ONGOING) {
+        int s = p.side == CE_WHITE ? 65 : 0;
+        if (!cb_choose_move_strength(&p, hist, nh, s, &m, NULL)) break;
+        ce_make(&p, m);
+        hist[nh++] = p.hash;
+        plies++;
+    }
+    CEStatus st = ce_status(&p, hist, nh);
+    int score = cb_evaluate(&p);
+    if (p.side == CE_BLACK) score = -score;
+    printf("  sterkte 65 (wit) tegen 0 (zwart): %d halve zetten, status %d, stand %+d\n", plies, (int)st, score);
+    CHECK((st == CE_CHECKMATE && p.side == CE_BLACK) || score > 300, "sterkte 65 wint van sterkte 0");
+}
+
 int main(void) {
     ce_init();
     test_perft();
@@ -469,6 +564,8 @@ int main(void) {
     test_san();
     test_bot();
     test_move_rating();
+    test_puzzles();
+    test_adaptive_bot();
     printf("\nGeslaagd: %d, mislukt: %d\n", g_pass, g_fail);
     if (g_fail) {
         printf("TESTS MISLUKT\n");

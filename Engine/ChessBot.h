@@ -21,6 +21,10 @@ extern "C" {
 int cb_choose_move(const CEPosition *pos, const uint64_t *history, int count,
                    int level, CEMove *out, volatile int *cancel);
 
+// Meegroeiende bot: sterkte 0 (ultra slecht, bijna willekeurige zetten) t/m 100 (sterkst).
+int cb_choose_move_strength(const CEPosition *pos, const uint64_t *history, int count,
+                            int strength, CEMove *out, volatile int *cancel);
+
 // Zoekt op een vaste diepte zonder toeval en zonder tijdslimiet (voor tests).
 int cb_search_depth(const CEPosition *pos, int depth, CEMove *out, int *score);
 

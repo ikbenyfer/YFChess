@@ -388,6 +388,42 @@ int cb_choose_move(const CEPosition *pos, const uint64_t *history, int count,
     return root_search(pos, history, count, depth, timeMs, noise, cancel, out, NULL);
 }
 
+int cb_choose_move_strength(const CEPosition *pos, const uint64_t *history, int count,
+                            int strength, CEMove *out, volatile int *cancel) {
+    ce_init();
+    if (strength < 0) strength = 0;
+    if (strength > 100) strength = 100;
+    CEMove legal[CE_MAX_MOVES];
+    int n = ce_gen_legal(pos, legal);
+    if (n == 0) return 0;
+    if (cancel && *cancel) return 0;
+    // Heel zwak: vaak een willekeurige zet (90% bij sterkte 0, 0% vanaf sterkte 30).
+    int randomPct = 90 - strength * 3;
+    if (randomPct > 0 && (int)(next_rand() % 100) < randomPct) {
+        // Bij de allerlaagste sterktes soms zelfs bewust een slechte zet.
+        int worstPct = strength < 15 ? (15 - strength) * 3 : 0;
+        if (worstPct > 0 && (int)(next_rand() % 100) < worstPct) {
+            int worstScore = 1000000;
+            CEMove worst = legal[0];
+            for (int i = 0; i < n; i++) {
+                CEPosition q = *pos;
+                ce_make(&q, legal[i]);
+                int s = -cb_evaluate(&q);
+                if (s < worstScore) { worstScore = s; worst = legal[i]; }
+            }
+            *out = worst;
+            return 1;
+        }
+        *out = legal[next_rand() % (uint32_t)n];
+        return 1;
+    }
+    int depth = strength < 35 ? 1 : strength < 55 ? 2 : strength < 70 ? 3 : strength < 85 ? 4 : 5;
+    int noise = strength < 70 ? 400 - strength * 11 / 2 : 0;
+    if (noise < 0) noise = 0;
+    int timeMs = depth >= 4 ? 5000 : 3000;
+    return root_search(pos, history, count, depth, timeMs, noise, cancel, out, NULL);
+}
+
 int cb_search_depth(const CEPosition *pos, int depth, CEMove *out, int *score) {
     return root_search(pos, NULL, 0, depth, 0, 0, NULL, out, score);
 }
