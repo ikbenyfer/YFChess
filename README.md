@@ -19,6 +19,17 @@ Gemaakt in Objective-C + UIKit en gebouwd met Theos op GitHub Actions.
 - **Instellingen**: licht/donker thema, animaties, legale zetten tonen, coördinaten,
   botniveau. Alles wordt bewaard in NSUserDefaults.
 
+## Stukken
+
+In Instellingen kies je de stukken (Klassiek, Modern of 3D) en de bordkleur (bruin, groen, blauw, grijs).
+De plaatjes komen van [lichess.org](https://github.com/lichess-org/lila/blob/master/COPYING.md) en staan als SVG in `Art/pieces/`;
+GitHub Actions maakt er tijdens het bouwen PNG's van.
+
+| Set | Maker | Licentie |
+| --- | --- | --- |
+| Modern (`cburnett`) | Colin M.L. Burnett | GPLv2+ |
+| 3D (`staunty`) | sadsnake1 | CC BY-NC-SA 4.0 (niet commercieel) |
+
 ## Regels die de engine kent
 
 Legale zetten, schaak, mat, pat, rokade, en passant, promotie (ook onderpromotie),

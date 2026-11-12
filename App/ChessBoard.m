@@ -66,6 +66,7 @@
 
 - (void)refreshTheme {
     [self setNeedsDisplay];
+    if (!_animating) [self rebuildPieces];
 }
 
 - (void)drawRect:(CGRect)rect {

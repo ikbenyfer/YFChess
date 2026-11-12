@@ -11,6 +11,8 @@
 + (NSString *)dutchNameForType:(int)type;      // "dame"
 + (int)valueForType:(int)type;                 // 1, 3, 3, 5, 9
 + (NSString *)figurineSAN:(NSString *)san;     // Nf3 -> ♘f3
+// Plaatje uit de gekozen stukkenset, of nil bij de klassieke tekens.
++ (UIImage *)imageForPiece:(uint8_t)piece;
 @end
 
 // Een stuk op het bord. Wit = witte vulling met zwarte rand, zwart = donkere vulling.

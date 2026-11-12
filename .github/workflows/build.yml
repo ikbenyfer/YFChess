@@ -50,7 +50,7 @@ jobs:
       - name: Linux-pakketten installeren
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential fakeroot rsync curl perl zip unzip git libxml2 libtinfo6 file
+          sudo apt-get install -y build-essential fakeroot rsync curl perl zip unzip git libxml2 libtinfo6 file librsvg2-bin
 
       - name: Theos downloaden
         run: git clone --recursive --depth=1 https://github.com/theos/theos.git "$THEOS"
@@ -85,6 +85,19 @@ jobs:
           # De interne (private) WebKit-map kan openbare headers verbergen; we gebruiken hem niet.
           rm -rf "$SDK/System/Library/PrivateFrameworks/WebKit.framework"
           ls "$SDK/System/Library/Frameworks/UIKit.framework/Headers" | head -3
+
+      - name: Stukken omzetten (SVG naar PNG)
+        working-directory: project
+        run: |
+          for dir in Art/pieces/*/; do
+            set_name=$(basename "$dir")
+            for svg in "$dir"*.svg; do
+              name=$(basename "$svg" .svg)
+              rsvg-convert -w 160 -h 160 -a "$svg" -o "Resources/${set_name}-${name}.png"
+            done
+          done
+          ls Resources | grep -c "\.png$"
+          test "$(ls Resources/cburnett-*.png Resources/staunty-*.png | wc -l)" -eq 24
 
       - name: App bouwen
         working-directory: project

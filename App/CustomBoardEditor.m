@@ -122,6 +122,7 @@ typedef NS_ENUM(NSInteger, EditorTool) {
     for (YFButton *b in _paletteButtons) {
         [b applyTheme];
         b.backgroundColor = s.lightSquareColor;
+        [[b viewWithTag:99] setNeedsDisplay];
     }
     for (YFButton *b in _actionButtons) [b applyTheme];
     [_eraseButton applyTheme];

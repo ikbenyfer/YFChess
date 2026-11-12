@@ -55,6 +55,7 @@
     SettingsManager *s = [SettingsManager shared];
     _titleLabel.textColor = s.textColor;
     _subtitle.textColor = s.secondaryTextColor;
+    [_logo setNeedsDisplay];
     for (YFButton *b in _buttons) [b applyTheme];
     [self setNeedsStatusBarAppearanceUpdate];
     if (!_didAnimate && s.animations) {

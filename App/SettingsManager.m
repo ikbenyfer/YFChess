@@ -26,6 +26,8 @@ static UIColor *RGB(unsigned int hex) {
         NSUserDefaults *d = [NSUserDefaults standardUserDefaults];
         [d registerDefaults:@{
             @"darkTheme": @NO,
+            @"pieceSet": @2,
+            @"boardTheme": @0,
             @"animations": @YES,
             @"showLegalMoves": @YES,
             @"showCoordinates": @YES,
@@ -37,6 +39,10 @@ static UIColor *RGB(unsigned int hex) {
             @"clockIncrement": @0,
         }];
         _darkTheme = [d boolForKey:@"darkTheme"];
+        _pieceSet = [d integerForKey:@"pieceSet"];
+        if (_pieceSet < 0 || _pieceSet > 2) _pieceSet = 2;
+        _boardTheme = [d integerForKey:@"boardTheme"];
+        if (_boardTheme < 0 || _boardTheme > 3) _boardTheme = 0;
         _animations = [d boolForKey:@"animations"];
         _showLegalMoves = [d boolForKey:@"showLegalMoves"];
         _showCoordinates = [d boolForKey:@"showCoordinates"];
@@ -58,6 +64,8 @@ static UIColor *RGB(unsigned int hex) {
 - (void)save {
     NSUserDefaults *d = [NSUserDefaults standardUserDefaults];
     [d setBool:_darkTheme forKey:@"darkTheme"];
+    [d setInteger:_pieceSet forKey:@"pieceSet"];
+    [d setInteger:_boardTheme forKey:@"boardTheme"];
     [d setBool:_animations forKey:@"animations"];
     [d setBool:_showLegalMoves forKey:@"showLegalMoves"];
     [d setBool:_showCoordinates forKey:@"showCoordinates"];
@@ -81,8 +89,25 @@ static UIColor *RGB(unsigned int hex) {
 - (UIColor *)accentColor { return _darkTheme ? RGB(0xC89B5E) : RGB(0x8B5A2B); }
 - (UIColor *)buttonColor { return _darkTheme ? RGB(0x3A342D) : RGB(0xE6D8C3); }
 - (UIColor *)buttonTextColor { return _darkTheme ? RGB(0xEEE6DA) : RGB(0x2B2118); }
-- (UIColor *)lightSquareColor { return _darkTheme ? RGB(0xD9C4A0) : RGB(0xF0D9B5); }
-- (UIColor *)darkSquareColor { return _darkTheme ? RGB(0x8E6A47) : RGB(0xB58863); }
++ (NSArray *)pieceSetNames { return @[ @"Klassiek", @"Modern", @"3D" ]; }
++ (NSArray *)boardThemeNames { return @[ @"Bruin", @"Groen", @"Blauw", @"Grijs" ]; }
+
+- (UIColor *)lightSquareColor {
+    switch (_boardTheme) {
+        case 1: return RGB(0xEEEED2);
+        case 2: return RGB(0xDEE3E6);
+        case 3: return RGB(0xDCDCDC);
+        default: return _darkTheme ? RGB(0xD9C4A0) : RGB(0xF0D9B5);
+    }
+}
+- (UIColor *)darkSquareColor {
+    switch (_boardTheme) {
+        case 1: return RGB(0x769656);
+        case 2: return RGB(0x8CA2AD);
+        case 3: return RGB(0x9A9A9A);
+        default: return _darkTheme ? RGB(0x8E6A47) : RGB(0xB58863);
+    }
+}
 - (UIColor *)errorColor { return _darkTheme ? RGB(0xFF7A6B) : RGB(0xB3261E); }
 - (UIColor *)okColor { return _darkTheme ? RGB(0x8FD18F) : RGB(0x2E7D32); }
 

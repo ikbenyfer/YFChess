@@ -3,3 +3,5 @@ packages/
 ipa/
 *.o
 /test_engine*
+Resources/cburnett-*.png
+Resources/staunty-*.png

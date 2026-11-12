@@ -1,6 +1,7 @@
 // ChessPiece.m
 
 #import "ChessPiece.h"
+#import "SettingsManager.h"
 
 @implementation ChessPiece
 
@@ -57,6 +58,22 @@
     }
 }
 
++ (UIImage *)imageForPiece:(uint8_t)piece {
+    NSInteger set = [SettingsManager shared].pieceSet;
+    if (set <= 0 || !piece) return nil;
+    static NSMutableDictionary *cache = nil;
+    if (!cache) cache = [NSMutableDictionary dictionary];
+    NSString *folder = set == 1 ? @"cburnett" : @"staunty";
+    NSString *name = [NSString stringWithFormat:@"%@-%c%c", folder,
+                      CE_COLOR(piece) == CE_WHITE ? 'w' : 'b', " PNBRQK"[CE_TYPE(piece)]];
+    id cached = cache[name];
+    if (cached) return cached == [NSNull null] ? nil : cached;
+    NSString *path = [[NSBundle mainBundle] pathForResource:name ofType:@"png"];
+    UIImage *img = path ? [UIImage imageWithContentsOfFile:path] : nil;
+    cache[name] = img ? img : (id)[NSNull null];
+    return img;
+}
+
 + (NSString *)figurineSAN:(NSString *)san {
     NSMutableString *m = [san mutableCopy];
     NSDictionary *map = @{ @"K": @"♔", @"Q": @"♕", @"R": @"♖", @"B": @"♗", @"N": @"♘" };
@@ -89,6 +106,12 @@
 
 - (void)drawRect:(CGRect)rect {
     if (!_piece) return;
+    UIImage *img = [ChessPiece imageForPiece:_piece];
+    if (img) {
+        CGFloat inset = MIN(self.bounds.size.width, self.bounds.size.height) * 0.04;
+        [img drawInRect:CGRectInset(self.bounds, inset, inset)];
+        return;
+    }
     CGSize size = self.bounds.size;
     CGFloat s = MIN(size.width, size.height);
     UIFont *font = [UIFont systemFontOfSize:s * 0.78];

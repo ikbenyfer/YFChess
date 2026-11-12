@@ -9,6 +9,8 @@
 + (instancetype)shared;
 
 @property (nonatomic) BOOL darkTheme;
+@property (nonatomic) NSInteger pieceSet;   // 0 klassiek (tekens), 1 modern, 2 3D
+@property (nonatomic) NSInteger boardTheme; // 0 bruin, 1 groen, 2 blauw, 3 grijs
 @property (nonatomic) BOOL animations;
 @property (nonatomic) BOOL showLegalMoves;
 @property (nonatomic) BOOL showCoordinates;
@@ -21,6 +23,8 @@
 @property (nonatomic, copy) NSString *editorDraftFEN;
 
 - (void)save;
++ (NSArray *)pieceSetNames;
++ (NSArray *)boardThemeNames;
 
 // Thema
 - (UIColor *)backgroundColor;
