@@ -9,15 +9,38 @@
 #include "ChessBot.h"
 #include "ChessPuzzles.h"
 
-// Puzzels per groep: 0 = mat in 1, 1 = mat in 2, 2 = eindspel.
+// Puzzels per groep: 0 = mat in 1, 1 = mat in 2, 2 = eindspel (vind de zetten), 3 = eindspel tegen de bot.
+static NSInteger PuzzleGroup(const CPPuzzle *p) {
+    if (p->type == CP_MATE) return p->n == 1 ? 0 : 1;
+    if (p->type == CP_LINE) return 2;
+    return 3;
+}
+
 static NSArray *PuzzleIndexesInGroup(NSInteger group) {
     NSMutableArray *a = [NSMutableArray array];
     for (int i = 0; i < cp_count(); i++) {
-        const CPPuzzle *p = cp_get(i);
-        NSInteger g = p->type == CP_ENDGAME ? 2 : (p->n == 1 ? 0 : 1);
-        if (g == group) [a addObject:@(i)];
+        if (PuzzleGroup(cp_get(i)) == group) [a addObject:@(i)];
     }
     return a;
+}
+
+// Alle puzzels in de volgorde van de lijst.
+static NSArray *AllPuzzlesInOrder(void) {
+    NSMutableArray *a = [NSMutableArray array];
+    for (NSInteger g = 0; g < 4; g++) [a addObjectsFromArray:PuzzleIndexesInGroup(g)];
+    return a;
+}
+
+static NSString *DifficultyText(int rating) {
+    if (rating <= 0) return nil;
+    if (rating < 1000) return @"\u2605 makkelijk";
+    if (rating < 1300) return @"\u2605\u2605 gemiddeld";
+    return @"\u2605\u2605\u2605 moeilijk";
+}
+
+static int SquareFromText(const char *s) {
+    if (!s || s[0] < 'a' || s[0] > 'h' || s[1] < '1' || s[1] > '8') return -1;
+    return (s[1] - '1') * 8 + (s[0] - 'a');
 }
 
 static NSString *PuzzleFEN(int index) {
@@ -45,7 +68,7 @@ static NSString *PuzzleFEN(int index) {
 }
 
 - (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView {
-    return 3;
+    return 4;
 }
 
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
@@ -56,12 +79,15 @@ static NSString *PuzzleFEN(int index) {
     NSArray *idx = PuzzleIndexesInGroup(section);
     NSInteger solved = 0;
     for (NSNumber *n in idx) if ([[SettingsManager shared] isPuzzleSolved:PuzzleFEN(n.intValue)]) solved++;
-    NSString *name = section == 0 ? @"Mat in 1" : section == 1 ? @"Mat in 2" : @"Eindspel-oefeningen";
+    NSString *name = section == 0 ? @"Mat in 1" : section == 1 ? @"Mat in 2"
+                   : section == 2 ? @"Eindspel: vind de juiste zetten" : @"Eindspel: zet mat tegen de bot";
     return [NSString stringWithFormat:@"%@ (%ld van %lu opgelost)", name, (long)solved, (unsigned long)idx.count];
 }
 
 - (NSString *)tableView:(UITableView *)tableView titleForFooterInSection:(NSInteger)section {
-    if (section == 2) return @"Bij een eindspel speel je tegen de bot. Zet mat binnen het aantal zetten.";
+    if (section == 2) return @"Vind steeds de beste zet. De tegenstander antwoordt vanzelf. De oranje markering is de laatste zet van je tegenstander.";
+    if (section == 3) return @"Hier speel je tegen de bot. Zet mat binnen het aantal zetten.";
+    if (section == 1) return @"Mat-puzzels en eindspel-reeksen (behalve de eerste) komen uit de openbare lichess-puzzeldatabase.";
     return nil;
 }
 
@@ -91,10 +117,13 @@ static NSString *PuzzleFEN(int index) {
     cell.textLabel.text = [NSString stringWithFormat:@"%ld. %@%@", (long)indexPath.row + 1,
                            [NSString stringWithUTF8String:p->title], solved ? @"  ✓" : @""];
     NSString *who = pos.side == CE_WHITE ? @"Wit" : @"Zwart";
-    if (p->type == CP_MATE)
-        cell.detailTextLabel.text = [NSString stringWithFormat:@"%@ aan zet • mat in %d", who, p->n];
-    else
-        cell.detailTextLabel.text = [NSString stringWithFormat:@"%@ aan zet • mat binnen %d zetten", who, p->n];
+    NSString *detail;
+    if (p->type == CP_MATE) detail = [NSString stringWithFormat:@"%@ aan zet \u2022 mat in %d", who, p->n];
+    else if (p->type == CP_LINE) detail = [NSString stringWithFormat:@"%@ aan zet \u2022 %d zetten vinden", who, p->n];
+    else detail = [NSString stringWithFormat:@"%@ aan zet \u2022 mat binnen %d zetten", who, p->n];
+    NSString *diff = DifficultyText(p->rating);
+    if (diff) detail = [detail stringByAppendingFormat:@" \u2022 %@", diff];
+    cell.detailTextLabel.text = detail;
     cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
     return cell;
 }
@@ -128,6 +157,8 @@ static NSString *PuzzleFEN(int index) {
     int _selected;
     int _lastFrom, _lastTo;
     NSUInteger _generation;
+    NSArray *_lineMoves;   // CP_LINE: oplossing
+    NSUInteger _step;      // volgende zet in de oplossing
     ChessBoardView *_board;
     UIView *_panel;
     UILabel *_taskLabel;
@@ -232,12 +263,20 @@ static NSString *PuzzleFEN(int index) {
     _hintLevel = 0;
     _selected = -1;
     _lastFrom = _lastTo = -1;
+    if (_puzzle->last && strlen(_puzzle->last) >= 4) {
+        _lastFrom = SquareFromText(_puzzle->last);
+        _lastTo = SquareFromText(_puzzle->last + 2);
+    }
+    _step = 0;
+    _lineMoves = (_puzzle->type == CP_LINE && _puzzle->line)
+        ? [[NSString stringWithUTF8String:_puzzle->line] componentsSeparatedByString:@" "] : @[];
     _hashes = [NSMutableData dataWithBytes:&_pos.hash length:sizeof(uint64_t)];
     [_board setFlipped:_userColor == CE_BLACK animated:NO];
     int number = 0;
-    NSArray *group = PuzzleIndexesInGroup(_puzzle->type == CP_ENDGAME ? 2 : (_puzzle->n == 1 ? 0 : 1));
+    NSInteger groupNr = PuzzleGroup(_puzzle);
+    NSArray *group = PuzzleIndexesInGroup(groupNr);
     for (NSUInteger i = 0; i < group.count; i++) if ([group[i] intValue] == _index) number = (int)i + 1;
-    NSString *kind = _puzzle->type == CP_ENDGAME ? @"Eindspel" : (_puzzle->n == 1 ? @"Mat in 1" : @"Mat in 2");
+    NSString *kind = groupNr == 0 ? @"Mat in 1" : groupNr == 1 ? @"Mat in 2" : @"Eindspel";
     self.title = [NSString stringWithFormat:@"%@ • %d", kind, number];
     [self updateTask];
     [self setFeedback:@"Tik op een stuk en dan op een veld." color:nil];
@@ -254,6 +293,11 @@ static NSString *PuzzleFEN(int index) {
     if (_puzzle->type == CP_MATE) {
         if (_movesLeft == 1) t = [NSString stringWithFormat:@"%@ aan zet: geef mat in 1 zet.", [self colorName]];
         else t = [NSString stringWithFormat:@"%@ aan zet: geef mat in %d zetten.", [self colorName], _movesLeft];
+    } else if (_puzzle->type == CP_LINE) {
+        int mine = (int)(_step / 2) + 1;
+        if (mine > _puzzle->n) mine = _puzzle->n;
+        t = [NSString stringWithFormat:@"%@ \u2022 %@ aan zet: vind de beste zet (%d van %d).",
+             [NSString stringWithUTF8String:_puzzle->title], [self colorName], mine, _puzzle->n];
     } else {
         t = [NSString stringWithFormat:@"%@: zet mat tegen de bot. Nog %d zetten over.",
              [NSString stringWithUTF8String:_puzzle->title], _movesLeft];
@@ -306,8 +350,71 @@ static NSString *PuzzleFEN(int index) {
                 color:[SettingsManager shared].errorColor];
 }
 
+- (void)wrongMove:(CEMove)m {
+    // Fout: laat de zet even zien en zet hem dan terug.
+    _beforeTry = _pos;
+    int oldFrom = _lastFrom, oldTo = _lastTo;
+    [self applyMove:m];
+    _busy = YES;
+    [self setFeedback:@"Helaas, dat is niet de oplossing. Probeer het nog eens." color:[SettingsManager shared].errorColor];
+    NSUInteger gen = ++_generation;
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        if (gen != self->_generation) return;
+        self->_pos = self->_beforeTry;
+        self->_hashes.length = self->_hashes.length - sizeof(uint64_t);
+        self->_lastFrom = oldFrom;
+        self->_lastTo = oldTo;
+        self->_busy = NO;
+        [self render:-1 to:-1];
+    });
+}
+
+- (BOOL)lineMove:(NSString *)uci into:(CEMove *)out {
+    return ce_parse_uci(&_pos, uci.UTF8String, out) != 0;
+}
+
+- (void)userLineMove:(CEMove)m {
+    NSString *expected = _step < _lineMoves.count ? _lineMoves[_step] : nil;
+    char buf[8];
+    ce_move_to_uci(m, buf, sizeof buf);
+    NSString *played = [NSString stringWithUTF8String:buf];
+    CEPosition after = _pos;
+    ce_make(&after, m);
+    CEMove tmp[CE_MAX_MOVES];
+    BOOL mates = ce_gen_legal(&after, tmp) == 0 && ce_in_check(&after, after.side);
+    if (![played isEqualToString:expected] && !mates) {
+        [self wrongMove:m];
+        return;
+    }
+    [self applyMove:m];
+    _step++;
+    if (mates || _step >= _lineMoves.count) {
+        [self solved];
+        return;
+    }
+    [self updateTask];
+    [self setFeedback:@"Goed zo! De tegenstander antwoordt\u2026" color:[SettingsManager shared].okColor];
+    _busy = YES;
+    NSUInteger gen = ++_generation;
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.6 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        if (gen != self->_generation) return;
+        CEMove reply;
+        if (self->_step < self->_lineMoves.count && [self lineMove:self->_lineMoves[self->_step] into:&reply]) {
+            [self applyMove:reply];
+            self->_step++;
+        }
+        self->_busy = NO;
+        [self updateTask];
+        [self setFeedback:@"Goed zo! Zoek nu de volgende zet." color:[SettingsManager shared].okColor];
+    });
+}
+
 - (void)userMove:(CEMove)m {
     _hintLevel = 0;
+    if (_puzzle->type == CP_LINE) {
+        [self userLineMove:m];
+        return;
+    }
     if (_puzzle->type == CP_MATE) {
         if (!cb_move_mates_within(&_pos, m, _movesLeft)) {
             // Fout: laat de zet even zien en zet hem dan terug.
@@ -465,7 +572,9 @@ static NSString *PuzzleFEN(int index) {
         return;
     }
     CEMove m;
-    if (!cb_find_mate_move(&_pos, _movesLeft, &m)) return;
+    if (_puzzle->type == CP_LINE) {
+        if (_step >= _lineMoves.count || ![self lineMove:_lineMoves[_step] into:&m]) return;
+    } else if (!cb_find_mate_move(&_pos, _movesLeft, &m)) return;
     if (_hintLevel == 1) {
         _hintLevel = 2;
         _selected = m.from;
@@ -488,8 +597,9 @@ static NSString *PuzzleFEN(int index) {
 }
 
 - (void)nextTapped {
-    int next = _index + 1;
-    if (next >= cp_count()) next = 0;
+    NSArray *order = AllPuzzlesInOrder();
+    NSUInteger pos = [order indexOfObject:@(_index)];
+    int next = (pos == NSNotFound || pos + 1 >= order.count) ? [order.firstObject intValue] : [order[pos + 1] intValue];
     _index = next;
     _puzzle = cp_get(next);
     [self loadPuzzle];

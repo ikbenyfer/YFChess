@@ -509,7 +509,7 @@ static void test_puzzles(void) {
             CHECK(pz->n >= 10, "eindspel %d: genoeg zetten", i);
         }
     }
-    CHECK(mate1 >= 40 && mate2 >= 24 && endgames >= 4 && lineCount >= 50,
+    CHECK(mates == mate1 + mate2 && mate1 >= 40 && mate2 >= 24 && endgames >= 4 && lineCount >= 50,
           "genoeg puzzels (%d mat in 1, %d mat in 2, %d eindspel tegen bot, %d eindspel-reeksen)", mate1, mate2, endgames, lineCount);
     printf("  %d mat in 1, %d mat in 2, %d eindspel tegen bot, %d eindspel-reeksen\n", mate1, mate2, endgames, lineCount);
     // Een foute zet wordt herkend.
