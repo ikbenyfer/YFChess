@@ -17,9 +17,9 @@ jobs:
         run: |
           gcc --version | head -1
           gcc -std=c99 -O2 -Wall -Wextra -Werror -IEngine \
-            Engine/ChessEngine.c Engine/ChessBot.c Tests/test_engine.c -o test_engine
+            Engine/ChessEngine.c Engine/ChessBot.c Tests/test_engine.c -o test_engine -lm
           clang -std=c99 -O2 -Wall -Wextra -Werror -IEngine \
-            Engine/ChessEngine.c Engine/ChessBot.c Tests/test_engine.c -o test_engine_clang
+            Engine/ChessEngine.c Engine/ChessBot.c Tests/test_engine.c -o test_engine_clang -lm
 
       - name: Tests draaien
         run: ./test_engine
@@ -30,7 +30,7 @@ jobs:
       - name: Tests met geheugencontrole (AddressSanitizer + UBSan)
         run: |
           gcc -std=c99 -O1 -g -fsanitize=address,undefined -fno-sanitize-recover=all -IEngine \
-            Engine/ChessEngine.c Engine/ChessBot.c Tests/test_engine.c -o test_engine_asan
+            Engine/ChessEngine.c Engine/ChessBot.c Tests/test_engine.c -o test_engine_asan -lm
           ./test_engine_asan
 
   build:

@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/time.h>
+#include <math.h>
 
 #define CB_INF 1000000
 #define CB_MATE 100000
@@ -389,4 +390,74 @@ int cb_choose_move(const CEPosition *pos, const uint64_t *history, int count,
 
 int cb_search_depth(const CEPosition *pos, int depth, CEMove *out, int *score) {
     return root_search(pos, NULL, 0, depth, 0, 0, NULL, out, score);
+}
+
+double cb_win_percent(int cp) {
+    if (cp > 3000) cp = 3000;
+    if (cp < -3000) cp = -3000;
+    return 50.0 + 50.0 * (2.0 / (1.0 + exp(-0.00368208 * (double)cp)) - 1.0);
+}
+
+double cb_move_accuracy(double winLoss) {
+    if (winLoss < 0) winLoss = 0;
+    double a = 103.1668 * exp(-0.04354 * winLoss) - 3.1669;
+    if (a < 0) a = 0;
+    if (a > 100) a = 100;
+    return a;
+}
+
+int cb_analyse_move(const CEPosition *before, const uint64_t *hist, int count,
+                    CEMove played, int depth, CBMoveAnalysis *out, volatile int *cancel) {
+    ce_init();
+    if (depth < 1) depth = 1;
+    CEMove legal[CE_MAX_MOVES];
+    int n = ce_gen_legal(before, legal);
+    int found = 0;
+    for (int i = 0; i < n; i++) {
+        if (same_move(legal[i], played)) { played = legal[i]; found = 1; break; }
+    }
+    if (!found) return 0;
+    memset(out, 0, sizeof(*out));
+    out->best = played;
+    if (n == 1) {
+        out->rating = CB_RATE_FORCED;
+        return 1;
+    }
+    CEMove best;
+    int bestScore = 0;
+    if (!root_search(before, hist, count, depth, 0, 0, cancel, &best, &bestScore)) return 0;
+    int playedScore = bestScore;
+    if (!same_move(best, played)) {
+        SearchCtx *c = (SearchCtx *)calloc(1, sizeof(SearchCtx));
+        if (!c) return 0;
+        c->cancel = cancel;
+        int start = count > CB_HIST_KEEP ? count - CB_HIST_KEEP : 0;
+        for (int i = start; hist && i < count; i++) c->hashes[c->nh++] = hist[i];
+        if (c->nh == 0 || c->hashes[c->nh - 1] != before->hash) c->hashes[c->nh++] = before->hash;
+        CEPosition q = *before;
+        ce_make(&q, played);
+        c->hashes[c->nh++] = q.hash;
+        playedScore = -search(c, &q, depth - 1, -CB_INF, CB_INF, 1);
+        int stopped = c->stop;
+        free(c);
+        if (stopped) return 0;
+        if (playedScore > bestScore) {
+            // De gespeelde zet blijkt even goed of beter: dan is hij de beste.
+            bestScore = playedScore;
+            best = played;
+        }
+    }
+    double loss = cb_win_percent(bestScore) - cb_win_percent(playedScore);
+    if (loss < 0) loss = 0;
+    out->best = best;
+    out->bestScore = bestScore;
+    out->playedScore = playedScore;
+    out->winLoss = loss;
+    if (same_move(best, played) || loss < 1.0) out->rating = CB_RATE_BEST;
+    else if (loss < 3.0) out->rating = CB_RATE_EXCELLENT;
+    else if (loss < 8.0) out->rating = CB_RATE_GOOD;
+    else if (loss < 15.0) out->rating = CB_RATE_INACCURACY;
+    else if (loss < 28.0) out->rating = CB_RATE_MISTAKE;
+    else out->rating = CB_RATE_BLUNDER;
+    return 1;
 }

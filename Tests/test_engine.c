@@ -418,6 +418,47 @@ static void test_bot(void) {
     printf("  partij bot tegen bot: %d halve zetten, status %d\n", plies, (int)ce_status(&p, hist, nh));
 }
 
+static int rate(const char *fen, const char *uci, CBMoveAnalysis *a) {
+    CEPosition p;
+    load(&p, fen);
+    CEMove m;
+    if (!ce_parse_uci(&p, uci, &m)) { printf("FOUT  zet %s niet legaal
+", uci); g_fail++; return -1; }
+    if (!cb_analyse_move(&p, NULL, 0, m, 3, a, NULL)) { printf("FOUT  analyse mislukt
+"); g_fail++; return -1; }
+    return (int)a->rating;
+}
+
+static void test_move_rating(void) {
+    printf("[zetbeoordeling]
+");
+    CBMoveAnalysis a;
+    int r = rate("6k1/5ppp/8/8/8/8/8/R5K1 w - - 0 1", "a1a8", &a);
+    CHECK(r == CB_RATE_BEST, "mat in 1 is de beste zet (kreeg %d)", r);
+    r = rate("4k3/8/8/8/8/8/3Q4/4K3 w - - 0 1", "d2d7", &a);
+    CHECK(r == CB_RATE_BLUNDER, "dame weggeven is een blunder (kreeg %d, verlies %.1f)", r, a.winLoss);
+    char uci[8];
+    ce_move_to_uci(a.best, uci, sizeof uci);
+    CHECK(strcmp(uci, "d2d7") != 0, "beste zet is niet de blunder (%s)", uci);
+    r = rate("4k3/8/8/3q4/8/8/8/3RK3 w - - 0 1", "d1d5", &a);
+    CHECK(r == CB_RATE_BEST, "gratis dame slaan is de beste zet (kreeg %d)", r);
+    r = rate("4k3/8/8/3q4/8/8/8/3RK3 w - - 0 1", "e1f2", &a);
+    CHECK(r >= CB_RATE_MISTAKE, "dame laten staan is een fout of blunder (kreeg %d, verlies %.1f)", r, a.winLoss);
+    r = rate("k7/8/K7/8/7p/8/8/1R6 b - - 0 1", "h4h3", &a);
+    CHECK(r == CB_RATE_FORCED, "enige zet wordt herkend (kreeg %d)", r);
+    r = rate("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1", "e2e4", &a);
+    CHECK(r <= CB_RATE_GOOD, "1.e4 is minstens goed (kreeg %d, verlies %.1f)", r, a.winLoss);
+    CHECK(cb_win_percent(0) > 49.9 && cb_win_percent(0) < 50.1, "50%% bij gelijke stand");
+    CHECK(cb_win_percent(100000) > 99.0 && cb_win_percent(-100000) < 1.0, "mat = bijna 100%% of 0%%");
+    CHECK(cb_move_accuracy(0) > 99.0 && cb_move_accuracy(40) < 30.0, "nauwkeurigheid daalt bij verlies");
+    volatile int cancel = 1;
+    CEPosition p;
+    ce_start(&p);
+    CEMove m;
+    ce_parse_uci(&p, "g1f3", &m);
+    CHECK(!cb_analyse_move(&p, NULL, 0, m, 5, &a, &cancel) || 1, "annuleren crasht niet");
+}
+
 int main(void) {
     ce_init();
     test_perft();
@@ -430,6 +471,7 @@ int main(void) {
     test_fen_and_hash();
     test_san();
     test_bot();
+    test_move_rating();
     printf("\nGeslaagd: %d, mislukt: %d\n", g_pass, g_fail);
     if (g_fail) {
         printf("TESTS MISLUKT\n");

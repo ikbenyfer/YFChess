@@ -27,6 +27,33 @@ int cb_search_depth(const CEPosition *pos, int depth, CEMove *out, int *score);
 // Stellingswaardering vanuit de kant die aan zet is (centipionnen).
 int cb_evaluate(const CEPosition *pos);
 
+// Zetbeoordeling (zoals "Beste zet" of "Blunder").
+typedef enum {
+    CB_RATE_BEST = 0,
+    CB_RATE_EXCELLENT,
+    CB_RATE_GOOD,
+    CB_RATE_INACCURACY,
+    CB_RATE_MISTAKE,
+    CB_RATE_BLUNDER,
+    CB_RATE_FORCED      // er was maar één legale zet
+} CBRating;
+
+typedef struct {
+    CBRating rating;
+    CEMove best;         // beste zet volgens de bot
+    int bestScore;       // waardering na de beste zet (centipionnen, kant die zet)
+    int playedScore;     // waardering na de gespeelde zet
+    double winLoss;      // verlies aan winstkans in procentpunten (0-100)
+} CBMoveAnalysis;
+
+// Kansen op winst (0-100) bij een waardering in centipionnen.
+double cb_win_percent(int cp);
+// Nauwkeurigheid (0-100) van een zet bij een bepaald verlies aan winstkans.
+double cb_move_accuracy(double winLoss);
+// Beoordeelt de gespeelde zet in stelling `before`. Geeft 1 bij succes.
+int cb_analyse_move(const CEPosition *before, const uint64_t *history, int count,
+                    CEMove played, int depth, CBMoveAnalysis *out, volatile int *cancel);
+
 #ifdef __cplusplus
 }
 #endif
