@@ -1,0 +1,9 @@
+Package: nl.yf.chess
+Name: YF Schaak
+Version: 1.0.0
+Architecture: iphoneos-arm
+Description: Offline schaakapp voor iPad 2 / iOS 9: tegen de bot, 1 tegen 1, eigen stellingen en schaakklok.
+Maintainer: YF
+Author: YF
+Section: Games
+Depends: firmware (>= 9.0)

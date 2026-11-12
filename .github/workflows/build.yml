@@ -32,3 +32,101 @@ jobs:
           gcc -std=c99 -O1 -g -fsanitize=address,undefined -fno-sanitize-recover=all -IEngine \
             Engine/ChessEngine.c Engine/ChessBot.c Tests/test_engine.c -o test_engine_asan
           ./test_engine_asan
+
+  build:
+    name: App bouwen (iOS 9, armv7)
+    needs: tests
+    runs-on: ubuntu-latest
+    env:
+      THEOS: ${{ github.workspace }}/theos
+      SDK_NAME: iPhoneOS14.5
+
+    steps:
+      - name: Code ophalen
+        uses: actions/checkout@v4
+        with:
+          path: project
+
+      - name: Linux-pakketten installeren
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential fakeroot rsync curl perl zip unzip git libxml2 libtinfo6 file
+
+      - name: Theos downloaden
+        run: git clone --recursive --depth=1 https://github.com/theos/theos.git "$THEOS"
+
+      - name: iOS-toolchain downloaden (compiler en linker)
+        run: |
+          mkdir -p "$THEOS/toolchain"
+          curl -fsSL "https://github.com/L1ghtmann/llvm-project/releases/latest/download/iOSToolchain-x86_64.tar.xz" \
+            | tar -xJf - -C "$THEOS/toolchain/"
+          ls "$THEOS/toolchain/linux/iphone/bin"
+
+      - name: ldid (nep-ondertekening) klaarzetten
+        run: |
+          TC="$THEOS/toolchain/linux/iphone/bin"
+          if command -v ldid >/dev/null 2>&1; then
+            echo "ldid gevonden: $(command -v ldid)"
+          elif [ -x "$TC/ldid" ]; then
+            sudo ln -sf "$TC/ldid" /usr/local/bin/ldid
+          else
+            sudo curl -fsSL -o /usr/local/bin/ldid \
+              "https://github.com/ProcursusTeam/ldid/releases/latest/download/ldid_linux_x86_64"
+            sudo chmod +x /usr/local/bin/ldid
+          fi
+          ldid 2>&1 | head -3 || true
+
+      - name: iOS ${{ env.SDK_NAME }} SDK downloaden
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          "$THEOS/bin/install-sdk" "$SDK_NAME"
+          SDK="$THEOS/sdks/$SDK_NAME.sdk"
+          # De interne (private) WebKit-map kan openbare headers verbergen; we gebruiken hem niet.
+          rm -rf "$SDK/System/Library/PrivateFrameworks/WebKit.framework"
+          ls "$SDK/System/Library/Frameworks/UIKit.framework/Headers" | head -3
+
+      - name: App bouwen
+        working-directory: project
+        run: |
+          sed -i 's/\r$//' layout/DEBIAN/postinst
+          chmod 755 layout/DEBIAN/postinst
+          make clean package FINALPACKAGE=1 messages=yes
+
+      - name: Controleren (ARMv7 en iOS 9)
+        working-directory: project
+        run: |
+          APP=".theos/_/Applications/YFChess.app"
+          BIN="$APP/YFChess"
+          TC="$THEOS/toolchain/linux/iphone/bin"
+          INFO="$(file "$BIN")"
+          if [ -x "$TC/lipo" ]; then INFO="$INFO / $("$TC/lipo" -info "$BIN")"; fi
+          echo "Architectuur: $INFO"
+          if echo "$INFO" | grep -qi "arm64" && ! echo "$INFO" | grep -qiE "armv7|arm_v7"; then
+            echo "::error::De app is niet voor ARMv7 gebouwd!"
+            exit 1
+          fi
+          if [ -x "$TC/otool" ]; then
+            "$TC/otool" -l "$BIN" | grep -A4 -E "LC_VERSION_MIN_IPHONEOS|LC_BUILD_VERSION" || true
+            echo "Frameworks:"
+            "$TC/otool" -L "$BIN" || true
+          fi
+          grep -A1 MinimumOSVersion "$APP/Info.plist" || true
+          ls -l "$APP"
+
+      - name: IPA maken
+        working-directory: project
+        run: |
+          rm -rf ipa
+          mkdir -p ipa/Payload
+          cp -R ".theos/_/Applications/YFChess.app" ipa/Payload/
+          (cd ipa && zip -qr ../packages/YFChess.ipa Payload)
+          ls -l packages
+
+      - name: Resultaat bewaren (download dit)
+        uses: actions/upload-artifact@v4
+        with:
+          name: YFChess
+          path: |
+            project/packages/*.ipa
+            project/packages/*.deb
